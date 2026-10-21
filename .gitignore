@@ -1,0 +1,31 @@
+# Personal media catalog, ratings, prompts extracted from files, and local logs.
+/data/
+/addon-library-roots.json
+
+# Downloaded portable runtime and local configuration.
+/runtime/
+.env
+.env.*
+*.log
+
+# Personal backups and export archives must be reviewed separately.
+/Backups/
+/backups/
+*.zip
+*.7z
+*.rar
+
+# AI models and adjacent metadata are not part of this source release.
+*.safetensors
+*.ckpt
+*.pt
+*.cm-info.json
+*.metadata.json
+*.swarm.json
+
+# Editor and operating-system clutter.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
