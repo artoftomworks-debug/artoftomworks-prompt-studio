@@ -37,6 +37,8 @@ A `SETUP.cmd` külön is futtatható az első indítás előkészítéséhez. A 
 
 Benne van az alkalmazás, a helyi archívumkiszolgáló, egy offline HTML-tartalék, az indító, a beállító és az útmutatók. **Nincs benne** a te médiád, promptod, idővonalterved, szószedeted, saját választásod, gépútvonalad, keresőindexed, naplód, böngészőadataid, Node.js-ed vagy Ollama-modelled. A tiszta archívum **nulla mappával** indul. Csak azokat adja hozzá a felhasználó, amelyeket ő szeretne.
 
+A GitHub-tárhely [workflows mappájában](workflows/README_HU.md) külön megtalálható öt Eros-, DaSiWa- és LTX 2.5-féle ComfyUI JSON-mentés. A korábban elkészült Prompt Studio `v1.19.0` ZIP-ben ezek még nincsenek benne; a külön Workflow Studio programot sem tartalmazzák. A szükséges modelleket és kiegészítőket másik gépen külön kell telepíteni.
+
 ## Opcionális helyi AI
 
 A kézi promptépítés, a mentett promptok, a képekbe ágyazott promptadatok olvasása, a médiaarchívum és a keresés Ollama nélkül is működik. Az AI-s promptjavaslathoz, képelemzéshez és AI-fordításhoz:

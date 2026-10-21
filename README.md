@@ -37,6 +37,8 @@ Included: the application, the local catalog server, an offline HTML fallback, s
 
 The package is small because it downloads Node.js only on a machine that needs it. The local AI model is optional and downloaded separately if desired.
 
+The repository also has [five companion ComfyUI video workflows](workflows/README.md) for Eros, DaSiWa and LTX 2.5. They are separate JSON backups, not part of the `v1.19.0` Prompt Studio ZIP or the separate Workflow Studio application. Models and custom nodes must be installed independently.
+
 ## Optional local AI
 
 The editor, saved prompts, image metadata reading, media archive, and search work without Ollama. For AI-generated suggestions, local visual analysis, and AI-assisted translation:
