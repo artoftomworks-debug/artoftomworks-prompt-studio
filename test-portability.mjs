@@ -16,6 +16,7 @@ try {
   await mkdir(mediaFolder);
   await mkdir(join(sandbox,"dist"));
   await copyFile(new URL("./media-catalog.mjs",import.meta.url),modulePath);
+  await copyFile(new URL("./cleanup-advisor.mjs",import.meta.url),join(sandbox,"cleanup-advisor.mjs"));
   await copyFile(new URL("./dist/sentence-bank.mjs",import.meta.url),join(sandbox,"dist","sentence-bank.mjs"));
   await copyFile(new URL("./dist/translation-glossary.mjs",import.meta.url),glossaryPath);
   await writeFile(mediaPath,"temporary test media");
@@ -45,7 +46,7 @@ try {
   assert.equal(JSON.parse(gunzipSync(await readFile(indexPath)).toString("utf8")).items.length,0);
   console.log("Global clean first-run, scanning, search, and safe deletion tests passed.");
 } finally {
-  for (const path of [mediaPath,sidecarPath,indexPath,modulePath,glossaryPath,join(sandbox,"dist","sentence-bank.mjs")]) {
+  for (const path of [mediaPath,sidecarPath,indexPath,modulePath,join(sandbox,"cleanup-advisor.mjs"),glossaryPath,join(sandbox,"dist","sentence-bank.mjs")]) {
     try { await unlink(path); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   try { await rmdir(join(sandbox,"data")); } catch (error) { if (error.code !== "ENOENT") throw error; }

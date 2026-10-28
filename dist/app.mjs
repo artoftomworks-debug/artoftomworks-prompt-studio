@@ -14,12 +14,31 @@ import { attachDirectorTimeline } from "./director-ui.mjs";
 import { attachPromptCoach } from "./prompt-coach.mjs";
 import { attachAddonAdvisor } from "./addon-advisor.mjs";
 import { attachSurprisePrompt } from "./creative-forge.mjs";
-import { attachNegativeAdvisor } from "./negative-advisor.mjs";
+import { attachAiHub, attachLocalModelPicker } from "./ai-hub.mjs";
+import { attachPromptWorkbench } from "./prompt-workbench.mjs";
 
 const classicCustomIds = ["style", "lighting", "mood", "camera", "still-shot", "still-angle", "still-lens", "still-medium", "still-camera-model", "still-production", "video-production", "video-device", "video-stability", "still-quality-prefix", "video-quality-prefix"];
 
 const form = document.getElementById("builder");
 const uiLanguage = document.getElementById("ui-language");
+const uiTheme = document.getElementById("ui-theme");
+const themeCopy = {
+  HU: ["Megjelenés", "Sötétkék", "Fekete"],
+  EN: ["Appearance", "Dark blue", "Black"],
+  DE: ["Darstellung", "Dunkelblau", "Schwarz"],
+  FR: ["Apparence", "Bleu foncé", "Noir"],
+  ES: ["Apariencia", "Azul oscuro", "Negro"],
+  IT: ["Aspetto", "Blu scuro", "Nero"],
+  PT: ["Aparência", "Azul escuro", "Preto"],
+  PL: ["Wygląd", "Ciemny niebieski", "Czarny"]
+};
+function translateTheme() {
+  const [label, navy, black] = themeCopy[uiLanguage.value] || themeCopy.EN;
+  document.getElementById("ui-theme-label").textContent = label;
+  uiTheme.setAttribute("aria-label", label);
+  uiTheme.options[0].textContent = navy;
+  uiTheme.options[1].textContent = black;
+}
 const sourceLanguage = document.getElementById("source-language");
 const outputLanguage = document.getElementById("output-language");
 const imageButton = document.getElementById("mode-image");
@@ -49,7 +68,6 @@ let i2vController = null;
 let i2iController = null;
 let promptCoach = null;
 let addonAdvisor = null;
-let negativeAdvisor = null;
 let mode = "image";
 let currentPrompt = "";
 let lastGeneratedPrompt = "";
@@ -129,14 +147,14 @@ const continuityCopy = {
 };
 
 const imageCopy = {
-  EN: {title:"Start from an image",intro:"Drop an image to find stored prompt data, or ask a local vision model for a new suggestion.",drop:"Drop an image here",choose:"or click to choose PNG, JPG or WebP",found:"Prompt information found in the image",use:"Use as my idea",localTitle:"Local visual analysis",localBadge:"NO CLOUD UPLOAD",localHelp:"For images without prompt data: install Ollama and gemma3:4b once. The model runs on your computer. Analysis starts only when you click.",analyze:"Suggest a prompt from this image",none:"No usable prompt metadata found. You can try local visual analysis.",exact:"Stored prompt — copied from image metadata, not reconstructed.",graph:"Embedded ComfyUI workflow — choose a text field. This may not be the final prompt.",graphOnly:"A workflow is embedded, but no readable prompt text was found.",other:"Prompt metadata inspection currently supports PNG; visual analysis supports PNG, JPG and WebP.",suggested:"AI suggestion based on visible content — not the original prompt.",working:"Analyzing locally…",missing:"Ollama is unavailable. Install/start Ollama and download gemma3:4b, then try again.",modelMissing:"The gemma3:4b model is not installed in Ollama. Download it first.",failed:"Local analysis failed. Check Ollama, the model and browser permissions.",invalid:"Choose a PNG, JPG or WebP image under 100 MB.",busy:"This image cannot be read.",inserted:"Added to your idea. Review and adjust it before building."},
-  HU: {title:"Indulás egy képből",intro:"Húzz ide képet: megkeressük a tárolt promptot, vagy helyi képelemzővel új javaslatot kérhetsz.",drop:"Húzd ide a képet",choose:"vagy kattints: PNG, JPG, WebP",found:"A képen talált promptadat",use:"Átveszem az ötletemhez",localTitle:"Helyi képelemzés",localBadge:"NINCS FELHŐS FELTÖLTÉS",localHelp:"Ha nincs promptadat: egyszer telepítsd az Ollamát és a gemma3:4b modellt. A gépeden fut, és csak gombnyomásra indul.",analyze:"Javasolj promptot a képhez",none:"Nem találtam használható promptadatot. Kipróbálhatod a helyi képelemzést.",exact:"Eltárolt prompt — a képfájl adataiból, nem újraalkotva.",graph:"Beágyazott ComfyUI-workflow — válassz szöveges mezőt. Nem biztos, hogy ez a végleges prompt.",graphOnly:"Workflow van a képben, de olvasható promptszöveget nem találtam.",other:"Promptadatot jelenleg PNG-ben tudok keresni; a képelemzés PNG, JPG és WebP képpel működik.",suggested:"AI-javaslat a látható tartalom alapján — nem az eredeti prompt.",working:"Helyi elemzés folyamatban…",missing:"Az Ollama nem érhető el. Telepítsd/indítsd el, és töltsd le a gemma3:4b modellt.",modelMissing:"A gemma3:4b modell nincs telepítve az Ollamába. Előbb töltsd le.",failed:"A helyi elemzés nem sikerült. Ellenőrizd az Ollamát, a modellt és a böngésző engedélyeit.",invalid:"Válassz 100 MB alatti PNG, JPG vagy WebP képet.",busy:"Nem sikerült beolvasni ezt a képet.",inserted:"Az ötlet mezőbe tettem. Nézd át, mielőtt promptot építesz belőle."},
-  DE: {title:"Mit einem Bild beginnen",intro:"Bild ablegen: gespeicherte Prompt-Daten finden oder lokal einen Vorschlag erzeugen.",drop:"Bild hier ablegen",choose:"oder PNG, JPG, WebP auswählen",found:"Prompt-Information im Bild",use:"Als Idee übernehmen",localTitle:"Lokale Bildanalyse",localBadge:"KEIN CLOUD-UPLOAD",localHelp:"Ollama und gemma3:4b einmal installieren. Analyse startet nur per Klick.",analyze:"Prompt für dieses Bild vorschlagen",none:"Keine brauchbaren Prompt-Daten gefunden.",exact:"Gespeicherter Prompt aus Bildmetadaten.",graph:"ComfyUI-Workflow: Textfeld wählen; eventuell nicht der endgültige Prompt.",graphOnly:"Workflow vorhanden, aber kein lesbarer Prompt-Text.",other:"Metadaten derzeit nur für PNG; Bildanalyse für PNG, JPG, WebP.",suggested:"KI-Vorschlag, nicht der ursprüngliche Prompt.",working:"Lokale Analyse…",missing:"Ollama nicht verfügbar. Ollama und gemma3:4b installieren/starten.",modelMissing:"gemma3:4b ist nicht installiert.",failed:"Lokale Analyse fehlgeschlagen.",invalid:"PNG, JPG oder WebP unter 100 MB wählen.",busy:"Bild konnte nicht gelesen werden.",inserted:"Als Idee eingefügt; bitte prüfen."},
-  FR: {title:"Partir d'une image",intro:"Déposez une image pour retrouver le prompt enregistré ou obtenir une suggestion locale.",drop:"Déposez l'image ici",choose:"ou choisissez PNG, JPG, WebP",found:"Information de prompt trouvée",use:"Utiliser comme idée",localTitle:"Analyse visuelle locale",localBadge:"AUCUN ENVOI CLOUD",localHelp:"Installez Ollama et gemma3:4b une fois. L'analyse démarre seulement au clic.",analyze:"Suggérer un prompt",none:"Aucune donnée de prompt exploitable.",exact:"Prompt enregistré dans les métadonnées.",graph:"Workflow ComfyUI : choisissez un champ; ce n'est pas forcément le prompt final.",graphOnly:"Workflow présent, sans texte de prompt lisible.",other:"Métadonnées PNG uniquement; analyse PNG, JPG, WebP.",suggested:"Suggestion IA, pas le prompt original.",working:"Analyse locale…",missing:"Ollama indisponible. Installez/démarrez Ollama et gemma3:4b.",modelMissing:"gemma3:4b n'est pas installé.",failed:"L'analyse locale a échoué.",invalid:"Choisissez PNG, JPG ou WebP sous 100 Mo.",busy:"Impossible de lire l'image.",inserted:"Ajouté comme idée; vérifiez-le."},
-  ES: {title:"Empezar con una imagen",intro:"Suelta una imagen para encontrar su prompt guardado o generar una sugerencia local.",drop:"Suelta la imagen aquí",choose:"o elige PNG, JPG, WebP",found:"Información de prompt encontrada",use:"Usar como idea",localTitle:"Análisis visual local",localBadge:"SIN SUBIR A LA NUBE",localHelp:"Instala Ollama y gemma3:4b una vez. El análisis solo empieza al pulsar.",analyze:"Sugerir prompt para esta imagen",none:"No se encontraron datos de prompt útiles.",exact:"Prompt guardado en los metadatos.",graph:"Workflow ComfyUI: elige un campo; quizá no sea el prompt final.",graphOnly:"Hay workflow, pero no texto legible.",other:"Metadatos solo para PNG; análisis PNG, JPG, WebP.",suggested:"Sugerencia de IA, no el prompt original.",working:"Analizando localmente…",missing:"Ollama no está disponible. Instala/inicia Ollama y gemma3:4b.",modelMissing:"gemma3:4b no está instalado.",failed:"Falló el análisis local.",invalid:"Elige PNG, JPG o WebP de menos de 100 MB.",busy:"No se pudo leer la imagen.",inserted:"Añadido como idea; revísalo."},
-  IT: {title:"Inizia da un'immagine",intro:"Trascina un'immagine per trovare il prompt salvato o una proposta locale.",drop:"Trascina qui l'immagine",choose:"o scegli PNG, JPG, WebP",found:"Informazioni prompt trovate",use:"Usa come idea",localTitle:"Analisi visiva locale",localBadge:"NESSUN UPLOAD CLOUD",localHelp:"Installa Ollama e gemma3:4b una volta. L'analisi parte solo con un clic.",analyze:"Suggerisci un prompt",none:"Nessun dato prompt utilizzabile.",exact:"Prompt salvato nei metadati.",graph:"Workflow ComfyUI: scegli un campo; potrebbe non essere il prompt finale.",graphOnly:"Workflow presente, senza testo leggibile.",other:"Metadati solo PNG; analisi PNG, JPG, WebP.",suggested:"Suggerimento AI, non il prompt originale.",working:"Analisi locale…",missing:"Ollama non disponibile. Installa/avvia Ollama e gemma3:4b.",modelMissing:"gemma3:4b non è installato.",failed:"Analisi locale non riuscita.",invalid:"Scegli PNG, JPG o WebP sotto 100 MB.",busy:"Impossibile leggere l'immagine.",inserted:"Aggiunto come idea; controllalo."},
-  PT: {title:"Começar com uma imagem",intro:"Arraste uma imagem para encontrar o prompt guardado ou obter uma sugestão local.",drop:"Arraste a imagem para aqui",choose:"ou escolha PNG, JPG, WebP",found:"Informação do prompt encontrada",use:"Usar como ideia",localTitle:"Análise visual local",localBadge:"SEM ENVIO PARA A NUVEM",localHelp:"Instale Ollama e gemma3:4b uma vez. A análise só começa ao clicar.",analyze:"Sugerir prompt para esta imagem",none:"Não foram encontrados dados de prompt utilizáveis.",exact:"Prompt guardado nos metadados.",graph:"Workflow ComfyUI: escolha um campo; pode não ser o prompt final.",graphOnly:"Workflow presente, mas sem texto legível.",other:"Metadados só para PNG; análise PNG, JPG, WebP.",suggested:"Sugestão de IA, não o prompt original.",working:"Análise local…",missing:"Ollama indisponível. Instale/inicie Ollama e gemma3:4b.",modelMissing:"gemma3:4b não está instalado.",failed:"A análise local falhou.",invalid:"Escolha PNG, JPG ou WebP com menos de 100 MB.",busy:"Não foi possível ler a imagem.",inserted:"Adicionado como ideia; reveja-o."},
-  PL: {title:"Zacznij od obrazu",intro:"Upuść obraz, aby znaleźć zapisany prompt lub uzyskać lokalną propozycję.",drop:"Upuść obraz tutaj",choose:"lub wybierz PNG, JPG, WebP",found:"Informacje o prompcie w obrazie",use:"Użyj jako pomysłu",localTitle:"Lokalna analiza obrazu",localBadge:"BEZ WYSYŁANIA DO CHMURY",localHelp:"Zainstaluj Ollama i gemma3:4b. Analiza zacznie się dopiero po kliknięciu.",analyze:"Zaproponuj prompt",none:"Nie znaleziono użytecznych danych promptu.",exact:"Prompt zapisany w metadanych.",graph:"Workflow ComfyUI: wybierz pole; może to nie być końcowy prompt.",graphOnly:"Workflow jest, ale bez czytelnego tekstu.",other:"Metadane tylko PNG; analiza PNG, JPG, WebP.",suggested:"Propozycja AI, nie oryginalny prompt.",working:"Analiza lokalna…",missing:"Ollama niedostępna. Zainstaluj/uruchom Ollama i gemma3:4b.",modelMissing:"gemma3:4b nie jest zainstalowany.",failed:"Analiza lokalna nie powiodła się.",invalid:"Wybierz PNG, JPG lub WebP poniżej 100 MB.",busy:"Nie można odczytać obrazu.",inserted:"Dodano jako pomysł; sprawdź go."}
+  EN: {title:"Start from an image",intro:"Drop an image to find stored prompt data, or ask a local vision model for a new suggestion.",drop:"Drop an image here",choose:"or click to choose PNG, JPG or WebP",found:"Prompt information found in the image",use:"Use as my idea",localTitle:"Local visual analysis",localBadge:"NO CLOUD UPLOAD",localHelp:"Choose a local vision model below. Analysis starts only when you click.",analyze:"Suggest a prompt from this image",none:"No usable prompt metadata found. You can try local visual analysis.",exact:"Stored prompt — copied from image metadata, not reconstructed.",graph:"Embedded ComfyUI workflow — choose a text field. This may not be the final prompt.",graphOnly:"A workflow is embedded, but no readable prompt text was found.",other:"Prompt metadata inspection currently supports PNG; visual analysis supports PNG, JPG and WebP.",suggested:"AI suggestion based on visible content — not the original prompt.",working:"Analyzing locally…",missing:"Ollama is unavailable. Install/start Ollama and download gemma3:4b, then try again.",modelMissing:"The gemma3:4b model is not installed in Ollama. Download it first.",failed:"Local analysis failed. Check Ollama, the model and browser permissions.",invalid:"Choose a PNG, JPG or WebP image under 100 MB.",busy:"This image cannot be read.",inserted:"Added to your idea. Review and adjust it before building."},
+  HU: {title:"Indulás egy képből",intro:"Húzz ide képet: megkeressük a tárolt promptot, vagy helyi képelemzővel új javaslatot kérhetsz.",drop:"Húzd ide a képet",choose:"vagy kattints: PNG, JPG, WebP",found:"A képen talált promptadat",use:"Átveszem az ötletemhez",localTitle:"Helyi képelemzés",localBadge:"NINCS FELHŐS FELTÖLTÉS",localHelp:"Válassz lent helyi képelemző modellt. Az elemzés csak gombnyomásra indul.",analyze:"Javasolj promptot a képhez",none:"Nem találtam használható promptadatot. Kipróbálhatod a helyi képelemzést.",exact:"Eltárolt prompt — a képfájl adataiból, nem újraalkotva.",graph:"Beágyazott ComfyUI-workflow — válassz szöveges mezőt. Nem biztos, hogy ez a végleges prompt.",graphOnly:"Workflow van a képben, de olvasható promptszöveget nem találtam.",other:"Promptadatot jelenleg PNG-ben tudok keresni; a képelemzés PNG, JPG és WebP képpel működik.",suggested:"AI-javaslat a látható tartalom alapján — nem az eredeti prompt.",working:"Helyi elemzés folyamatban…",missing:"Az Ollama nem érhető el. Telepítsd/indítsd el, és töltsd le a gemma3:4b modellt.",modelMissing:"A gemma3:4b modell nincs telepítve az Ollamába. Előbb töltsd le.",failed:"A helyi elemzés nem sikerült. Ellenőrizd az Ollamát, a modellt és a böngésző engedélyeit.",invalid:"Válassz 100 MB alatti PNG, JPG vagy WebP képet.",busy:"Nem sikerült beolvasni ezt a képet.",inserted:"Az ötlet mezőbe tettem. Nézd át, mielőtt promptot építesz belőle."},
+  DE: {title:"Mit einem Bild beginnen",intro:"Bild ablegen: gespeicherte Prompt-Daten finden oder lokal einen Vorschlag erzeugen.",drop:"Bild hier ablegen",choose:"oder PNG, JPG, WebP auswählen",found:"Prompt-Information im Bild",use:"Als Idee übernehmen",localTitle:"Lokale Bildanalyse",localBadge:"KEIN CLOUD-UPLOAD",localHelp:"Unten ein lokales Bildmodell wählen. Analyse erst nach einem Klick.",analyze:"Prompt für dieses Bild vorschlagen",none:"Keine brauchbaren Prompt-Daten gefunden.",exact:"Gespeicherter Prompt aus Bildmetadaten.",graph:"ComfyUI-Workflow: Textfeld wählen; eventuell nicht der endgültige Prompt.",graphOnly:"Workflow vorhanden, aber kein lesbarer Prompt-Text.",other:"Metadaten derzeit nur für PNG; Bildanalyse für PNG, JPG, WebP.",suggested:"KI-Vorschlag, nicht der ursprüngliche Prompt.",working:"Lokale Analyse…",missing:"Ollama nicht verfügbar. Ollama und gemma3:4b installieren/starten.",modelMissing:"gemma3:4b ist nicht installiert.",failed:"Lokale Analyse fehlgeschlagen.",invalid:"PNG, JPG oder WebP unter 100 MB wählen.",busy:"Bild konnte nicht gelesen werden.",inserted:"Als Idee eingefügt; bitte prüfen."},
+  FR: {title:"Partir d'une image",intro:"Déposez une image pour retrouver le prompt enregistré ou obtenir une suggestion locale.",drop:"Déposez l'image ici",choose:"ou choisissez PNG, JPG, WebP",found:"Information de prompt trouvée",use:"Utiliser comme idée",localTitle:"Analyse visuelle locale",localBadge:"AUCUN ENVOI CLOUD",localHelp:"Choisissez un modèle visuel local ci-dessous. Analyse après un clic.",analyze:"Suggérer un prompt",none:"Aucune donnée de prompt exploitable.",exact:"Prompt enregistré dans les métadonnées.",graph:"Workflow ComfyUI : choisissez un champ; ce n'est pas forcément le prompt final.",graphOnly:"Workflow présent, sans texte de prompt lisible.",other:"Métadonnées PNG uniquement; analyse PNG, JPG, WebP.",suggested:"Suggestion IA, pas le prompt original.",working:"Analyse locale…",missing:"Ollama indisponible. Installez/démarrez Ollama et gemma3:4b.",modelMissing:"gemma3:4b n'est pas installé.",failed:"L'analyse locale a échoué.",invalid:"Choisissez PNG, JPG ou WebP sous 100 Mo.",busy:"Impossible de lire l'image.",inserted:"Ajouté comme idée; vérifiez-le."},
+  ES: {title:"Empezar con una imagen",intro:"Suelta una imagen para encontrar su prompt guardado o generar una sugerencia local.",drop:"Suelta la imagen aquí",choose:"o elige PNG, JPG, WebP",found:"Información de prompt encontrada",use:"Usar como idea",localTitle:"Análisis visual local",localBadge:"SIN SUBIR A LA NUBE",localHelp:"Elige abajo un modelo visual local. El análisis empieza al pulsar.",analyze:"Sugerir prompt para esta imagen",none:"No se encontraron datos de prompt útiles.",exact:"Prompt guardado en los metadatos.",graph:"Workflow ComfyUI: elige un campo; quizá no sea el prompt final.",graphOnly:"Hay workflow, pero no texto legible.",other:"Metadatos solo para PNG; análisis PNG, JPG, WebP.",suggested:"Sugerencia de IA, no el prompt original.",working:"Analizando localmente…",missing:"Ollama no está disponible. Instala/inicia Ollama y gemma3:4b.",modelMissing:"gemma3:4b no está instalado.",failed:"Falló el análisis local.",invalid:"Elige PNG, JPG o WebP de menos de 100 MB.",busy:"No se pudo leer la imagen.",inserted:"Añadido como idea; revísalo."},
+  IT: {title:"Inizia da un'immagine",intro:"Trascina un'immagine per trovare il prompt salvato o una proposta locale.",drop:"Trascina qui l'immagine",choose:"o scegli PNG, JPG, WebP",found:"Informazioni prompt trovate",use:"Usa come idea",localTitle:"Analisi visiva locale",localBadge:"NESSUN UPLOAD CLOUD",localHelp:"Scegli un modello visivo locale qui sotto. Analisi solo dopo un clic.",analyze:"Suggerisci un prompt",none:"Nessun dato prompt utilizzabile.",exact:"Prompt salvato nei metadati.",graph:"Workflow ComfyUI: scegli un campo; potrebbe non essere il prompt finale.",graphOnly:"Workflow presente, senza testo leggibile.",other:"Metadati solo PNG; analisi PNG, JPG, WebP.",suggested:"Suggerimento AI, non il prompt originale.",working:"Analisi locale…",missing:"Ollama non disponibile. Installa/avvia Ollama e gemma3:4b.",modelMissing:"gemma3:4b non è installato.",failed:"Analisi locale non riuscita.",invalid:"Scegli PNG, JPG o WebP sotto 100 MB.",busy:"Impossibile leggere l'immagine.",inserted:"Aggiunto come idea; controllalo."},
+  PT: {title:"Começar com uma imagem",intro:"Arraste uma imagem para encontrar o prompt guardado ou obter uma sugestão local.",drop:"Arraste a imagem para aqui",choose:"ou escolha PNG, JPG, WebP",found:"Informação do prompt encontrada",use:"Usar como ideia",localTitle:"Análise visual local",localBadge:"SEM ENVIO PARA A NUVEM",localHelp:"Escolha abaixo um modelo visual local. A análise começa ao clicar.",analyze:"Sugerir prompt para esta imagem",none:"Não foram encontrados dados de prompt utilizáveis.",exact:"Prompt guardado nos metadados.",graph:"Workflow ComfyUI: escolha um campo; pode não ser o prompt final.",graphOnly:"Workflow presente, mas sem texto legível.",other:"Metadados só para PNG; análise PNG, JPG, WebP.",suggested:"Sugestão de IA, não o prompt original.",working:"Análise local…",missing:"Ollama indisponível. Instale/inicie Ollama e gemma3:4b.",modelMissing:"gemma3:4b não está instalado.",failed:"A análise local falhou.",invalid:"Escolha PNG, JPG ou WebP com menos de 100 MB.",busy:"Não foi possível ler a imagem.",inserted:"Adicionado como ideia; reveja-o."},
+  PL: {title:"Zacznij od obrazu",intro:"Upuść obraz, aby znaleźć zapisany prompt lub uzyskać lokalną propozycję.",drop:"Upuść obraz tutaj",choose:"lub wybierz PNG, JPG, WebP",found:"Informacje o prompcie w obrazie",use:"Użyj jako pomysłu",localTitle:"Lokalna analiza obrazu",localBadge:"BEZ WYSYŁANIA DO CHMURY",localHelp:"Wybierz poniżej lokalny model obrazu. Analiza dopiero po kliknięciu.",analyze:"Zaproponuj prompt",none:"Nie znaleziono użytecznych danych promptu.",exact:"Prompt zapisany w metadanych.",graph:"Workflow ComfyUI: wybierz pole; może to nie być końcowy prompt.",graphOnly:"Workflow jest, ale bez czytelnego tekstu.",other:"Metadane tylko PNG; analiza PNG, JPG, WebP.",suggested:"Propozycja AI, nie oryginalny prompt.",working:"Analiza lokalna…",missing:"Ollama niedostępna. Zainstaluj/uruchom Ollama i gemma3:4b.",modelMissing:"gemma3:4b nie jest zainstalowany.",failed:"Analiza lokalna nie powiodła się.",invalid:"Wybierz PNG, JPG lub WebP poniżej 100 MB.",busy:"Nie można odczytać obrazu.",inserted:"Dodano jako pomysł; sprawdź go."}
 };
 
 function imageStrings() { return imageCopy[uiLanguage.value] || imageCopy.EN; }
@@ -149,6 +167,17 @@ function selectedUi() {
   const lang = languages.includes(uiLanguage.value) ? uiLanguage.value : "EN";
   return { ...ui[lang], ...translationCopy[lang] };
 }
+
+const anatomyCopy = {
+  EN:["Help with human hands and feet","For human subjects only. FLUX gets positive anatomical directions; other models also get negative exclusions. Review before use; no prompt can guarantee correct anatomy."],
+  HU:["Segítség az emberi kézhez és lábhoz","Csak emberi alaknál. FLUX-hoz a pozitív promptba kerül pontos anatómiai leírás; más modelleknél a negatívba is kerülnek kizárások. Használat előtt ellenőrizd; a hibátlan anatómia nem garantálható."],
+  DE:["Hilfe für menschliche Hände und Füße","Nur bei menschlichen Motiven. FLUX erhält positive Anatomieangaben; andere Modelle auch negative Ausschlüsse. Vor der Nutzung prüfen; korrekte Anatomie ist nicht garantiert."],
+  FR:["Améliorer les mains et les pieds humains","Uniquement pour les sujets humains. FLUX reçoit des indications positives ; les autres modèles reçoivent aussi des exclusions négatives. Vérifiez avant usage ; l'anatomie parfaite n'est pas garantie."],
+  ES:["Ayuda para manos y pies humanos","Solo para figuras humanas. FLUX recibe indicaciones positivas; otros modelos también reciben exclusiones negativas. Revisa el resultado; la anatomía perfecta no está garantizada."],
+  IT:["Aiuto per mani e piedi umani","Solo per soggetti umani. FLUX riceve indicazioni positive; gli altri modelli anche esclusioni negative. Controlla prima dell'uso; l'anatomia corretta non è garantita."],
+  PT:["Ajuda para mãos e pés humanos","Só para figuras humanas. FLUX recebe indicações positivas; outros modelos recebem também exclusões negativas. Revê antes de usar; a anatomia correta não é garantida."],
+  PL:["Pomoc przy ludzkich dłoniach i stopach","Tylko dla postaci ludzkich. FLUX otrzymuje wskazówki pozytywne; inne modele także wykluczenia negatywne. Sprawdź przed użyciem; poprawna anatomia nie jest gwarantowana."]
+};
 
 function fillSelect(id, items, oldValue) {
   const select = document.getElementById(id);
@@ -167,6 +196,14 @@ function translate() {
   const strings = selectedUi();
   const lang = uiLanguage.value;
   document.documentElement.lang = lang.toLowerCase();
+  translateTheme();
+  document.getElementById("back-to-top").textContent = ({
+    HU:"↑ Vissza az elejére",EN:"↑ Back to top",DE:"↑ Nach oben",FR:"↑ Retour en haut",
+    ES:"↑ Volver arriba",IT:"↑ Torna su",PT:"↑ Voltar ao topo",PL:"↑ Wróć na górę"
+  })[lang] || "↑ Back to top";
+  const [anatomyLabel,anatomyHelp] = anatomyCopy[lang] || anatomyCopy.EN;
+  document.getElementById("anatomy-label").textContent = anatomyLabel;
+  document.getElementById("anatomy-help").textContent = anatomyHelp;
   document.querySelectorAll("[data-i18n]").forEach((element) => {
     element.textContent = strings[element.dataset.i18n] || ui.EN[element.dataset.i18n] || "";
   });
@@ -307,14 +344,8 @@ async function analyzeImage() {
     // Direct file use remains available for browsers that permit file-to-loopback access.
     const base = location.protocol === "http:" && location.hostname === "127.0.0.1" && ["18765", "18766", "18767", "18768", "18769", "18770", "18771", "18772", "18773", "18774", "18775", "18776", "18777", "18778", "18817", "18818", "18819"].includes(location.port)
       ? location.origin : "http://127.0.0.1:11434";
-    const tagsResponse = await fetch(base + "/api/tags", { signal: controller.signal });
-    if (!tagsResponse.ok) throw new Error("Ollama unavailable");
-    const tags = await tagsResponse.json();
-    const installedModel = tags.models?.find((model) => model.name === "gemma3:4b" || model.name === "gemma3:latest");
-    if (!installedModel) {
-      status.textContent = copy.modelMissing;
-      return;
-    }
+    const installedModel=await imageModelPicker.getSelected(controller.signal);
+    if (!installedModel) { status.textContent=imageModelPicker.message();return; }
     const image = await imageBase64(selectedImage);
     const languageName = {HU:"Hungarian",EN:"English",DE:"German",FR:"French",ES:"Spanish",IT:"Italian",PT:"Portuguese",PL:"Polish"}[outputLanguage.value] || "English";
     const response = await fetch(base + "/api/chat", {
@@ -365,6 +396,7 @@ function readState() {
       ? ["style", "lighting", "mood", "camera", "video-production", "video-device", "video-stability"]
       : ["style", "lighting", "mood", "still-shot", "still-angle", "still-lens", "still-medium", "still-camera-model", "still-production"], outputLanguage.value),
     negatives: String(data.get("negatives") || ""),
+    anatomy: data.has("anatomy"),
     model: String(data.get("model") || "krea2"),
     frame: String(data.get("frame") || "auto"),
     memory: String(data.get("memory") || "mid"),
@@ -420,8 +452,6 @@ function updateResult() {
   document.getElementById("music").parentElement.hidden =
     mode !== "video" || !["music", "custom"].includes(state.sound);
   const pending = pendingTextFields(state);
-  const negativeValue = pending.includes("negatives") || translating ? "" : outputState(state).negatives;
-  negativeAdvisor?.syncClassic(negativeValue, JSON.stringify([state.negatives,state.sourceLanguage,state.outputLanguage,negativeValue,translating]));
   const generatedPrompt = pending.length || translating ? "" : buildPrompt(outputState(state));
   classicPending = !classicManualEdit && (pending.length > 0 || translating);
   if (generatedPrompt && !classicManualEdit &&
@@ -502,7 +532,6 @@ async function buildAndTranslate() {
     }
   }
   updateResult();
-  if (!translationError && currentPrompt) negativeAdvisor?.suggestFor("classic");
   if (currentPrompt) document.querySelector(".result-column").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -587,6 +616,7 @@ function sample() {
 
 uiLanguage.value = localStorage.getItem("artoftomworks.v2.uiLanguage") || "EN";
 if (!languages.includes(uiLanguage.value)) uiLanguage.value = "EN";
+uiTheme.value = document.documentElement.dataset.theme === "black" ? "black" : "navy";
 outputLanguage.value = localStorage.getItem("artoftomworks.v2.outputLanguage") || "EN";
 if (!languages.includes(outputLanguage.value)) outputLanguage.value = "EN";
 sourceLanguage.value = localStorage.getItem("artoftomworks.v2.sourceLanguage") || "EN";
@@ -615,6 +645,27 @@ uiLanguage.addEventListener("change", () => {
   translate();
   if (imagePromptKind) document.getElementById("image-provenance").textContent = imageStrings()[imagePromptKind];
 });
+uiTheme.addEventListener("change", () => {
+  const theme = uiTheme.value === "black" ? "black" : "navy";
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("artoftomworks.v2.theme", theme);
+});
+const backToTopButton=document.getElementById("back-to-top");
+function updateBackToTop() {
+  const show=window.scrollY>400 || (document.getElementById("catalog-results")?.scrollTop || 0)>180;
+  backToTopButton.classList.toggle("is-visible",show);
+  backToTopButton.tabIndex=show ? 0 : -1;
+}
+backToTopButton.addEventListener("click",() => {
+  const behavior=window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  document.getElementById("catalog-results")?.scrollTo({top:0,behavior});
+  window.scrollTo({top:0,behavior});
+});
+window.addEventListener("scroll",updateBackToTop,{passive:true});
+document.addEventListener("scroll",(event) => {
+  if (event.target?.id==="catalog-results") updateBackToTop();
+},true);
+updateBackToTop();
 outputLanguage.addEventListener("change", () => {
   localStorage.setItem("artoftomworks.v2.outputLanguage", outputLanguage.value);
   updateResult();
@@ -650,7 +701,6 @@ form.addEventListener("submit", (event) => {
 document.getElementById("sample").addEventListener("click", sample);
 document.getElementById("clear-fields").addEventListener("click", () => {
   for (const id of textFields) document.getElementById(id).value = "";
-  negativeAdvisor?.clear("classic");
   translatedFields.clear();
   translationError = "";
   classicManualEdit = true;
@@ -662,12 +712,10 @@ document.getElementById("clear-classic-prompt").addEventListener("click", () => 
   classicManualEdit = true;
   classicPending = false;
   classicEditor.clearCurrent();
-  document.getElementById("negatives").value = "";
-  negativeAdvisor?.clear("classic");
   updateResult();
 });
-document.getElementById("i2v-clear-prompt").addEventListener("click", () => { i2vController?.clearPrompt(); negativeAdvisor?.clear("i2v"); });
-document.getElementById("i2i-clear-prompt").addEventListener("click", () => { i2iController?.clearPrompt(); negativeAdvisor?.clear("i2i"); });
+document.getElementById("i2v-clear-prompt").addEventListener("click", () => i2vController?.clearPrompt());
+document.getElementById("i2i-clear-prompt").addEventListener("click", () => i2iController?.clearPrompt());
 
 let videoSuggestBusy = false;
 document.getElementById("video-suggest").addEventListener("click", async () => {
@@ -686,12 +734,9 @@ document.getElementById("video-suggest").addEventListener("click", async () => {
   try {
     const localProxy = location.protocol === "http:" && location.hostname === "127.0.0.1" && ["18774", "18775", "18776", "18777", "18778", "18817", "18818", "18819"].includes(location.port);
     const base = localProxy ? location.origin : "http://127.0.0.1:11434";
-    const tagsResponse = await fetch(base + "/api/tags", { signal:controller.signal });
-    if (!tagsResponse.ok) throw new Error("ollama");
-    const tags = await tagsResponse.json();
-    const model = tags.models?.find((item) => item.name === "gemma3:4b" || item.name === "gemma3:latest");
-    if (!model) { showStatus(editingCopy().modelMissing, "error"); return; }
-    const instruction = `Write one practical, polished TEXT-TO-VIDEO generation prompt in ${({EN:"English",HU:"Hungarian",DE:"German",FR:"French",ES:"Spanish",IT:"Italian",PT:"Portuguese",PL:"Polish"})[state.outputLanguage] || "English"}. Use only the user's supplied information and selected settings; do not invent new characters or scene facts. Idea: ${state.brief || "unspecified"}. Subject: ${state.subject || "unspecified"}. Action: ${state.action || "unspecified"}. Setting: ${state.setting || "unspecified"}. Style: ${state.style}. Lighting: ${state.lighting}. Mood: ${state.mood}. Camera: ${state.camera}. Production: ${state.production}. Device look: ${state.device}. Stability: ${state.stability}. Prompt opening: ${state.customQuality || state.qualityPrefix}. Other selected direction: ${state.customDirections || "none"}. Duration: ${state.duration} seconds. Sound: ${state.sound}; detail: ${state.music || "none"}; no dialogue: ${state.noVoice}. Separate negative prompt, for context only: ${state.negatives || "none"}. Do not copy the negative list or an Avoid section into the positive prompt; it has its own field in the Studio. If a field is unspecified, keep it flexible. Describe one continuous, feasible shot, subject motion separately from camera motion, with coherent timing. Keep the user's chosen visual direction. No preface, no markdown, no claims about model capabilities. Return only the positive prompt.`;
+    const model=await videoTextModelPicker.getSelected(controller.signal);
+    if (!model) { showStatus(videoTextModelPicker.message(), "error"); return; }
+    const instruction = `Write one practical, polished TEXT-TO-VIDEO generation prompt in ${({EN:"English",HU:"Hungarian",DE:"German",FR:"French",ES:"Spanish",IT:"Italian",PT:"Portuguese",PL:"Polish"})[state.outputLanguage] || "English"}. Use only the user's supplied information and selected settings; do not invent new characters or scene facts. Idea: ${state.brief || "unspecified"}. Subject: ${state.subject || "unspecified"}. Action: ${state.action || "unspecified"}. Setting: ${state.setting || "unspecified"}. Style: ${state.style}. Lighting: ${state.lighting}. Mood: ${state.mood}. Camera: ${state.camera}. Production: ${state.production}. Device look: ${state.device}. Stability: ${state.stability}. Prompt opening: ${state.customQuality || state.qualityPrefix}. Other selected direction: ${state.customDirections || "none"}. Duration: ${state.duration} seconds. Sound: ${state.sound}; detail: ${state.music || "none"}; no dialogue: ${state.noVoice}. Avoid: ${state.negatives || "none"}. If a field is unspecified, keep it flexible. Describe one continuous, feasible shot, subject motion separately from camera motion, with coherent timing. Keep the user's chosen visual direction. No preface, no markdown, no claims about model capabilities. Return only the prompt.`;
     const response = await fetch(base + "/api/chat", { method:"POST", headers:{ "Content-Type":"application/json" }, signal:controller.signal,
       body:JSON.stringify({ model:model.name, stream:false, options:{ temperature:0.45, num_predict:1200 }, messages:[{ role:"user", content:instruction }] }) });
     if (!response.ok) throw new Error("chat");
@@ -730,6 +775,8 @@ imageDrop.addEventListener("drop", (event) => {
   imageDrop.classList.remove("drag-over");
   void inspectImage(event.dataTransfer?.files?.[0]);
 });
+const imageModelPicker=attachLocalModelPicker({before:analyzeImageButton,getLanguage:()=>uiLanguage.value,vision:true});
+const videoTextModelPicker=attachLocalModelPicker({before:document.getElementById("video-suggest"),getLanguage:()=>uiLanguage.value});
 analyzeImageButton.addEventListener("click", () => { void analyzeImage(); });
 document.getElementById("use-image-prompt").addEventListener("click", () => {
   const value = document.getElementById("image-prompt").value.trim();
@@ -744,7 +791,6 @@ document.getElementById("use-image-prompt").addEventListener("click", () => {
 document.getElementById("reset").addEventListener("click", () => {
   if (!window.confirm(editingCopy().confirm)) return;
   form.reset();
-  negativeAdvisor?.clear("classic");
   for (const key of Object.keys(classicModeDrafts)) delete classicModeDrafts[key];
   continuityText.value = "";
   continuityBox.hidden = true;
@@ -793,8 +839,7 @@ copyButton.addEventListener("click", async () => {
 });
 document.getElementById("download").addEventListener("click", () => {
   if (!currentPrompt) return;
-  const negative = negativeAdvisor?.getText("classic") || "";
-  const blob = new Blob([currentPrompt + (negative ? `\n\nNegative prompt:\n${negative}` : "") + "\n"], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([currentPrompt + "\n"], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -808,52 +853,46 @@ document.getElementById("download").addEventListener("click", () => {
 i2vController = attachImageToVideo({
   getImage: () => selectedImage,
   imageBase64,
-  getLanguage: () => uiLanguage.value,
-  getNegative: () => negativeAdvisor?.getText("i2v") || "",
-  onPromptReady: () => negativeAdvisor?.suggestFor("i2v",{fill:true}),
-  onImageChange: () => negativeAdvisor?.clear("i2v")
+  getLanguage: () => uiLanguage.value
 });
 i2vController.translate();
 i2iController = attachImageToImage({
   getImage: () => selectedImage,
   imageBase64,
-  getLanguage: () => uiLanguage.value,
-  getNegative: () => negativeAdvisor?.getText("i2i") || "",
-  onPromptReady: () => negativeAdvisor?.suggestFor("i2i",{fill:true}),
-  onImageChange: () => negativeAdvisor?.clear("i2i")
+  getLanguage: () => uiLanguage.value
 });
 i2iController.translate();
 
 const savedPromptGetCurrent = () => {
     const editor = mode === "i2v" ? i2vController : mode === "i2i" ? i2iController : classicEditor;
     const modelSelect = document.getElementById(mode === "i2v" ? "i2v-model" : mode === "i2i" ? "i2i-model" : "model");
-    return { mode, prompt:editor.getText(), negative:negativeAdvisor?.getText(["image","video"].includes(mode)?"classic":mode)||"", language:editor.getLanguage(),
+    return { mode, prompt:editor.getText(), language:editor.getLanguage(),
+      negative:(mode === "image" || mode === "video") ? document.getElementById("negatives").value : "",
       model:modelSelect?.selectedOptions?.[0]?.textContent?.trim() || "" };
   };
+attachAiHub({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent });
+attachPromptWorkbench({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent });
 const savedPromptRestore = (entry) => {
     setMode(entry.mode, { carry:false });
+    if (entry.negative !== undefined && (entry.mode === "image" || entry.mode === "video"))
+      document.getElementById("negatives").value = String(entry.negative);
     if (entry.mode === "i2v") i2vController.setPrompt(entry.prompt, entry.language);
     else if (entry.mode === "i2i") i2iController.setPrompt(entry.prompt, entry.language);
     else {
       classicEditor.setPrompt(entry.prompt, entry.language);
-      document.getElementById("negatives").value = entry.negative || "";
       classicManualEdit = true;
       lastGeneratedPrompt = "";
       updateResult();
     }
-    negativeAdvisor?.setText(["image","video"].includes(entry.mode)?"classic":entry.mode,entry.negative||"");
   };
 attachSurprisePrompt({ getLanguage:() => uiLanguage.value, getMode:() => mode,
-  getCurrent:savedPromptGetCurrent, restore:savedPromptRestore,
-  onGenerated:()=>negativeAdvisor?.suggestFor("surprise",{fill:true}),
-  getNegative:()=>negativeAdvisor?.getText("surprise")||"" });
-negativeAdvisor = attachNegativeAdvisor({getLanguage:() => uiLanguage.value,getMode:() => mode});
+  getCurrent:savedPromptGetCurrent, restore:savedPromptRestore });
 attachPromptLibrary({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, restore:savedPromptRestore });
 addonAdvisor = attachAddonAdvisor({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, getMode:() => mode });
 promptCoach = attachPromptCoach({ getLanguage:() => uiLanguage.value, getMode:() => mode,
   getCurrent:savedPromptGetCurrent, setPrompt:(text, language) => {
     const current = savedPromptGetCurrent();
-    savedPromptRestore({ mode:current.mode, prompt:text, negative:current.negative, language, model:current.model });
+    savedPromptRestore({ mode:current.mode, prompt:text, language, model:current.model });
   }, getAddonFamilies:() => addonAdvisor.families(), inferAddonFamily:(text) => addonAdvisor.inferFamily(text),
   suggestGuideAddons:(prompt, family) => addonAdvisor.suggestForGuide(prompt, family) });
 const directorTimeline = attachDirectorTimeline({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent,
@@ -881,7 +920,6 @@ function resetWorkspace(prefix, defaults, controller) {
     element.dispatchEvent(new Event(element.tagName === "SELECT" || element.type === "checkbox" ? "change" : "input", { bubbles:true }));
   }
   controller?.resetPrompt();
-  negativeAdvisor?.clear(prefix);
   controller?.clearSuggestions();
 }
 document.getElementById("i2v-reset").addEventListener("click", () => resetWorkspace("i2v", initialI2v, i2vController));

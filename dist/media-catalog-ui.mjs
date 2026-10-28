@@ -1,5 +1,5 @@
-import { compareCatalogItems, catalogCompareCopy, experimentStorageKey, createExperimentEntry, normalizeExperimentEntries } from "./catalog-compare.mjs";
-import { mixArchivedPrompts } from "./creative-forge.mjs";
+import { compareCatalogItems, planNextExperiment, catalogCompareCopy, experimentStorageKey, createExperimentEntry, normalizeExperimentEntries } from "./catalog-compare.mjs";
+import { buildCreatorPassport, buildPromptCorrectionMessages, cleanPromptCorrectionResponse, MAX_CORRECTION_INPUT } from "./creator-passport.mjs";
 
 const catalogCopy = {
   HU:{ title:"Kereshető médiaarchívum", intro:"A kijelölt mappák képeinek és videóinak mentett promptjait keresi. Az eredeti fájlokat nem módosítja.", root:"További mappa teljes elérési útja", add:"Mappa hozzáadása", scan:"Archívum frissítése", scanning:"Beolvasás folyamatban…", search:"Keresés promptban, fájlnévben, modellben", all:"Minden típus", image:"Képek", video:"Videók", allFolders:"Minden mappa", result:"találat", indexed:"kiolvasható prompt", skipped:"fájlban nincs kiolvasható prompt", errors:"olvasási hiba", notScanned:"Még nem készült katalógus. Kattints az Archívum frissítése gombra.", empty:"Nincs találat.", load:"Prompt betöltése", copy:"Prompt másolása", view:"Videó megtekintése", path:"Fájl", prev:"Előző", next:"Következő", page:"Oldal", badRoot:"Nem sikerült hozzáadni a mappát.", offline:"A katalógushoz a Prompt Studio helyi indítóját használd.", confirm:"Lecseréljem az aktuális promptot a kiválasztottra?", loaded:"A prompt betöltve szerkesztésre.", copied:"A prompt a vágólapra került.", scanError:"A beolvasás megszakadt.", newRoot:"A mappa hozzáadva. Frissítsd az archívumot." },
@@ -10,6 +10,46 @@ const catalogCopy = {
   IT:{title:"Archivio multimediale",intro:"Cerca i prompt salvati nelle immagini e nei video delle cartelle scelte. Gli originali non vengono modificati.",root:"Percorso completo della cartella",add:"Aggiungi cartella",scan:"Aggiorna archivio",scanning:"Scansione…",search:"Cerca prompt, file e modelli",all:"Tutti",image:"Immagini",video:"Video",allFolders:"Tutte le cartelle",result:"risultati",indexed:"prompt leggibili",skipped:"file senza prompt",errors:"errori di lettura",notScanned:"Nessun catalogo. Aggiorna l'archivio.",empty:"Nessun risultato.",load:"Carica prompt",copy:"Copia prompt",view:"Mostra video",prev:"Precedente",next:"Successivo",page:"Pagina",badRoot:"Impossibile aggiungere la cartella.",offline:"Usa il launcher locale di Prompt Studio.",confirm:"Sostituire il prompt attuale?",loaded:"Prompt caricato.",copied:"Prompt copiato.",scanError:"Scansione interrotta.",newRoot:"Cartella aggiunta. Aggiorna l'archivio."},
   PT:{title:"Arquivo multimédia",intro:"Pesquise prompts guardados em imagens e vídeos das pastas escolhidas. Os originais não são alterados.",root:"Caminho completo de outra pasta",add:"Adicionar pasta",scan:"Atualizar arquivo",scanning:"A analisar…",search:"Pesquisar prompts, ficheiros e modelos",all:"Todos",image:"Imagens",video:"Vídeos",allFolders:"Todas as pastas",result:"resultados",indexed:"prompts legíveis",skipped:"ficheiros sem prompt",errors:"erros de leitura",notScanned:"Ainda não há catálogo. Atualize o arquivo.",empty:"Sem resultados.",load:"Carregar prompt",copy:"Copiar prompt",view:"Ver vídeo",prev:"Anterior",next:"Seguinte",page:"Página",badRoot:"Não foi possível adicionar a pasta.",offline:"Use o lançador local do Prompt Studio.",confirm:"Substituir o prompt atual?",loaded:"Prompt carregado.",copied:"Prompt copiado.",scanError:"Análise interrompida.",newRoot:"Pasta adicionada. Atualize o arquivo."},
   PL:{title:"Przeszukiwalne archiwum mediów",intro:"Wyszukuj prompty zapisane w obrazach i filmach z wybranych folderów. Oryginały pozostają bez zmian.",root:"Pełna ścieżka do folderu",add:"Dodaj folder",scan:"Odśwież archiwum",scanning:"Skanowanie…",search:"Szukaj promptów, plików i modeli",all:"Wszystkie",image:"Obrazy",video:"Filmy",allFolders:"Wszystkie foldery",result:"wyników",indexed:"odczytanych promptów",skipped:"plików bez promptu",errors:"błędów odczytu",notScanned:"Brak katalogu. Odśwież archiwum.",empty:"Brak wyników.",load:"Wczytaj prompt",copy:"Kopiuj prompt",view:"Pokaż film",prev:"Poprzednia",next:"Następna",page:"Strona",badRoot:"Nie udało się dodać folderu.",offline:"Użyj lokalnego uruchamiacza Prompt Studio.",confirm:"Zastąpić bieżący prompt?",loaded:"Prompt wczytany.",copied:"Prompt skopiowany.",scanError:"Skanowanie przerwane.",newRoot:"Folder dodany. Odśwież archiwum."}
+};
+const catalogDateCopy = {
+  HU:{heading:"Fájl módosítási dátuma (nem feltétlenül a készítés ideje)",allDates:"Minden dátum",today:"Ma",last7:"Utolsó 7 nap",last30:"Utolsó 30 nap",custom:"Egyéni időszak",from:"Ettől",to:"Eddig"},
+  EN:{heading:"File modification date (not necessarily creation date)",allDates:"All dates",today:"Today",last7:"Last 7 days",last30:"Last 30 days",custom:"Custom range",from:"From",to:"To"},
+  DE:{heading:"Änderungsdatum der Datei (nicht unbedingt Erstellungsdatum)",allDates:"Alle Daten",today:"Heute",last7:"Letzte 7 Tage",last30:"Letzte 30 Tage",custom:"Eigener Zeitraum",from:"Von",to:"Bis"},
+  FR:{heading:"Date de modification du fichier (pas forcément sa création)",allDates:"Toutes les dates",today:"Aujourd’hui",last7:"7 derniers jours",last30:"30 derniers jours",custom:"Période personnalisée",from:"Du",to:"Au"},
+  ES:{heading:"Fecha de modificación del archivo (no siempre de creación)",allDates:"Todas las fechas",today:"Hoy",last7:"Últimos 7 días",last30:"Últimos 30 días",custom:"Período personalizado",from:"Desde",to:"Hasta"},
+  IT:{heading:"Data di modifica del file (non necessariamente di creazione)",allDates:"Tutte le date",today:"Oggi",last7:"Ultimi 7 giorni",last30:"Ultimi 30 giorni",custom:"Intervallo personalizzato",from:"Da",to:"A"},
+  PT:{heading:"Data de modificação do ficheiro (não necessariamente de criação)",allDates:"Todas as datas",today:"Hoje",last7:"Últimos 7 dias",last30:"Últimos 30 dias",custom:"Período personalizado",from:"De",to:"Até"},
+  PL:{heading:"Data modyfikacji pliku (niekoniecznie utworzenia)",allDates:"Wszystkie daty",today:"Dzisiaj",last7:"Ostatnie 7 dni",last30:"Ostatnie 30 dni",custom:"Własny zakres",from:"Od",to:"Do"}
+};
+const catalogGalleryCopy = {
+  HU:{galleryView:"Napi galéria",listView:"Részletes lista",day:"Kiválasztott nap",previousDay:"Előző nap",nextDay:"Következő nap",galleryHint:"A kereső és a szűrők csak ezen a napon belül keresnek. A dátum a fájl módosítási ideje."},
+  EN:{galleryView:"Daily gallery",listView:"Detailed list",day:"Selected day",previousDay:"Previous day",nextDay:"Next day",galleryHint:"Search and filters apply only to this day. The date is the file modification date."},
+  DE:{galleryView:"Tagesgalerie",listView:"Detaillierte Liste",day:"Gewählter Tag",previousDay:"Vorheriger Tag",nextDay:"Nächster Tag",galleryHint:"Suche und Filter gelten nur für diesen Tag. Das Datum ist das Änderungsdatum der Datei."},
+  FR:{galleryView:"Galerie du jour",listView:"Liste détaillée",day:"Jour choisi",previousDay:"Jour précédent",nextDay:"Jour suivant",galleryHint:"La recherche et les filtres ne portent que sur ce jour. La date est celle de modification du fichier."},
+  ES:{galleryView:"Galería diaria",listView:"Lista detallada",day:"Día elegido",previousDay:"Día anterior",nextDay:"Día siguiente",galleryHint:"La búsqueda y los filtros se aplican solo a este día. Es la fecha de modificación del archivo."},
+  IT:{galleryView:"Galleria giornaliera",listView:"Elenco dettagliato",day:"Giorno scelto",previousDay:"Giorno precedente",nextDay:"Giorno successivo",galleryHint:"Ricerca e filtri valgono solo per questo giorno. La data è quella di modifica del file."},
+  PT:{galleryView:"Galeria diária",listView:"Lista detalhada",day:"Dia escolhido",previousDay:"Dia anterior",nextDay:"Dia seguinte",galleryHint:"A pesquisa e os filtros aplicam-se só a este dia. A data é a de modificação do ficheiro."},
+  PL:{galleryView:"Galeria dzienna",listView:"Lista szczegółowa",day:"Wybrany dzień",previousDay:"Poprzedni dzień",nextDay:"Następny dzień",galleryHint:"Wyszukiwanie i filtry dotyczą tylko tego dnia. To data modyfikacji pliku."}
+};
+const catalogAutoScanCopy = {
+  HU:"Automatikus archívumfrissítés induláskor és 15 percenként",
+  EN:"Refresh archive automatically at startup and every 15 minutes",
+  DE:"Archiv beim Start und alle 15 Minuten automatisch aktualisieren",
+  FR:"Actualiser l’archive au démarrage et toutes les 15 minutes",
+  ES:"Actualizar el archivo al iniciar y cada 15 minutos",
+  IT:"Aggiorna l’archivio all’avvio e ogni 15 minuti",
+  PT:"Atualizar o arquivo ao iniciar e a cada 15 minutos",
+  PL:"Odświeżaj archiwum przy uruchomieniu i co 15 minut"
+};
+const catalogPageJumpCopy = {
+  HU:{firstPage:"Első oldal",lastPage:"Utolsó oldal"},
+  EN:{firstPage:"First page",lastPage:"Last page"},
+  DE:{firstPage:"Erste Seite",lastPage:"Letzte Seite"},
+  FR:{firstPage:"Première page",lastPage:"Dernière page"},
+  ES:{firstPage:"Primera página",lastPage:"Última página"},
+  IT:{firstPage:"Prima pagina",lastPage:"Ultima pagina"},
+  PT:{firstPage:"Primeira página",lastPage:"Última página"},
+  PL:{firstPage:"Pierwsza strona",lastPage:"Ostatnia strona"}
 };
 const catalogPromptCopy = {
   HU:{files:"médiafájl",promptAll:"Mindegyik",promptYes:"Van mentett prompt",promptNo:"Nincs mentett prompt",noPrompt:"Ehhez a fájlhoz nem találtam kiolvasható promptot."},
@@ -94,6 +134,68 @@ const catalogViewerCopy = {
   PT:{previous:"Anterior",next:"Seguinte",select:"Selecionar para mais tarde",selected:"selecionados",delete:"Eliminar…",saveError:"Não foi possível guardar.",saved:"Guardado.",of:"/",preview:"Pré-visualização sem som"},
   PL:{previous:"Poprzedni",next:"Następny",select:"Zaznacz na później",selected:"zaznaczono",delete:"Usuń…",saveError:"Nie udało się zapisać.",saved:"Zapisano.",of:"/",preview:"Podgląd bez dźwięku"}
 };
+const catalogCleanupCopy = {
+  HU:{title:"Takarítási javaslatok",help:"Csak külön indításra vizsgál. Üres vagy gyanús fájlokat és bitre pontos másolatokat keres; az utolsó órában módosult fájlokat kihagyja. Nem töröl automatikusan. Minden találatot nézz át, mielőtt a Lomtárba küldenéd.",start:"Ellenőrzés indítása",cancel:"Megszakítás",idle:"Még nem futott ellenőrzés.",working:"Ellenőrzés folyamatban",done:"Ellenőrzés kész",none:"Nem találtam javaslatot.",suspect:"Gyanús fájl",duplicate:"Pontos másolat",empty:"Üres fájl",truncated:"Lehet, hogy hiányos fájl",header:"Szokatlan vagy hibás fájlfejléc",exact:"A csoport fájljai bitre azonosak; te döntsd el, melyik maradjon.",preview:"Megnézem",remove:"Törlés ellenőrzése…",previous:"Előző",next:"Következő",page:"Oldal",recent:"friss fájl kihagyva",changed:"megváltozott fájl kihagyva",unreadable:"nem ellenőrizhető",hashed:"ellenőrzött egyezés",error:"Az ellenőrzés nem sikerült.",cancelled:"Megszakítva.",review:"Találat: "},
+  EN:{title:"Cleanup suggestions",help:"Runs only when requested. Finds empty or suspicious files and byte-for-byte duplicates; skips files modified in the last hour. Never deletes automatically. Review each result before sending it to the Recycle Bin.",start:"Start check",cancel:"Cancel",idle:"No check has run yet.",working:"Checking",done:"Check complete",none:"No suggestions found.",suspect:"Suspicious file",duplicate:"Exact duplicate",empty:"Empty file",truncated:"Possibly incomplete file",header:"Unusual or invalid file header",exact:"Files in this group are byte-for-byte identical; choose which to keep.",preview:"Preview",remove:"Review deletion…",previous:"Previous",next:"Next",page:"Page",recent:"recent files skipped",changed:"changed files skipped",unreadable:"could not check",hashed:"matches checked",error:"Check failed.",cancelled:"Cancelled.",review:"Results: "},
+  DE:{title:"Aufräumvorschläge",help:"Nur auf Klick: leere oder verdächtige Dateien und bytegleiche Duplikate. Dateien der letzten Stunde werden übersprungen. Keine automatische Löschung.",start:"Prüfung starten",cancel:"Abbrechen",idle:"Noch keine Prüfung.",working:"Prüfung läuft",done:"Prüfung abgeschlossen",none:"Keine Vorschläge.",suspect:"Verdächtige Datei",duplicate:"Exaktes Duplikat",empty:"Leere Datei",truncated:"Möglicherweise unvollständig",header:"Ungewöhnlicher Dateikopf",exact:"Diese Dateien sind bytegleich. Entscheide, welche bleibt.",preview:"Ansehen",remove:"Löschen prüfen…",previous:"Zurück",next:"Weiter",page:"Seite",recent:"neue Dateien übersprungen",changed:"geänderte Dateien übersprungen",unreadable:"nicht prüfbar",hashed:"Vergleiche geprüft",error:"Prüfung fehlgeschlagen.",cancelled:"Abgebrochen.",review:"Treffer: "},
+  FR:{title:"Suggestions de nettoyage",help:"Sur demande seulement : fichiers vides ou suspects et doublons identiques. Les fichiers modifiés depuis moins d'une heure sont ignorés. Aucune suppression automatique.",start:"Lancer la vérification",cancel:"Annuler",idle:"Aucune vérification.",working:"Vérification",done:"Vérification terminée",none:"Aucune suggestion.",suspect:"Fichier suspect",duplicate:"Doublon exact",empty:"Fichier vide",truncated:"Fichier peut-être incomplet",header:"En-tête inhabituel",exact:"Fichiers identiques octet par octet ; choisissez lequel garder.",preview:"Voir",remove:"Vérifier la suppression…",previous:"Précédent",next:"Suivant",page:"Page",recent:"fichiers récents ignorés",changed:"fichiers modifiés ignorés",unreadable:"non vérifiables",hashed:"correspondances vérifiées",error:"Échec de la vérification.",cancelled:"Annulé.",review:"Résultats : "},
+  ES:{title:"Sugerencias de limpieza",help:"Solo a petición: archivos vacíos o sospechosos y duplicados idénticos. Omite los modificados en la última hora. Nunca borra automáticamente.",start:"Iniciar revisión",cancel:"Cancelar",idle:"Aún no hay revisión.",working:"Revisando",done:"Revisión terminada",none:"Sin sugerencias.",suspect:"Archivo sospechoso",duplicate:"Duplicado exacto",empty:"Archivo vacío",truncated:"Posiblemente incompleto",header:"Cabecera inusual",exact:"Archivos idénticos byte a byte; decide cuál conservar.",preview:"Ver",remove:"Revisar eliminación…",previous:"Anterior",next:"Siguiente",page:"Página",recent:"archivos recientes omitidos",changed:"archivos cambiados omitidos",unreadable:"sin comprobar",hashed:"coincidencias verificadas",error:"Falló la revisión.",cancelled:"Cancelado.",review:"Resultados: "},
+  IT:{title:"Suggerimenti di pulizia",help:"Solo su richiesta: file vuoti o sospetti e duplicati identici. Ignora i file modificati nell'ultima ora. Nessuna eliminazione automatica.",start:"Avvia controllo",cancel:"Annulla",idle:"Nessun controllo eseguito.",working:"Controllo",done:"Controllo completato",none:"Nessun suggerimento.",suspect:"File sospetto",duplicate:"Duplicato esatto",empty:"File vuoto",truncated:"Forse incompleto",header:"Intestazione insolita",exact:"File identici byte per byte; scegli quale tenere.",preview:"Anteprima",remove:"Controlla eliminazione…",previous:"Precedente",next:"Successivo",page:"Pagina",recent:"file recenti ignorati",changed:"file modificati ignorati",unreadable:"non verificabili",hashed:"corrispondenze verificate",error:"Controllo non riuscito.",cancelled:"Annullato.",review:"Risultati: "},
+  PT:{title:"Sugestões de limpeza",help:"Só a pedido: ficheiros vazios ou suspeitos e duplicados idênticos. Ignora ficheiros alterados na última hora. Nunca apaga automaticamente.",start:"Iniciar verificação",cancel:"Cancelar",idle:"Ainda sem verificação.",working:"A verificar",done:"Verificação concluída",none:"Sem sugestões.",suspect:"Ficheiro suspeito",duplicate:"Duplicado exato",empty:"Ficheiro vazio",truncated:"Talvez incompleto",header:"Cabeçalho invulgar",exact:"Ficheiros idênticos byte a byte; escolha qual manter.",preview:"Ver",remove:"Rever eliminação…",previous:"Anterior",next:"Seguinte",page:"Página",recent:"ficheiros recentes ignorados",changed:"ficheiros alterados ignorados",unreadable:"não verificáveis",hashed:"correspondências verificadas",error:"Verificação falhou.",cancelled:"Cancelado.",review:"Resultados: "},
+  PL:{title:"Sugestie porządkowania",help:"Tylko na żądanie: puste lub podejrzane pliki i identyczne kopie. Pomija pliki zmienione w ostatniej godzinie. Nigdy nie usuwa automatycznie.",start:"Rozpocznij sprawdzanie",cancel:"Anuluj",idle:"Nie wykonano sprawdzenia.",working:"Sprawdzanie",done:"Sprawdzanie zakończone",none:"Brak sugestii.",suspect:"Podejrzany plik",duplicate:"Dokładna kopia",empty:"Pusty plik",truncated:"Może być niekompletny",header:"Nietypowy nagłówek",exact:"Pliki są identyczne bajt po bajcie; wybierz, który zachować.",preview:"Podgląd",remove:"Sprawdź usunięcie…",previous:"Poprzednia",next:"Następna",page:"Strona",recent:"pominięto nowe pliki",changed:"pominięto zmienione pliki",unreadable:"nie można sprawdzić",hashed:"sprawdzone zgodności",error:"Sprawdzanie nie powiodło się.",cancelled:"Anulowano.",review:"Wyniki: "}
+};
+const cleanupBatchCopy = {
+  HU:{select:"Kijelölés törléshez",selected:"kijelölve (legfeljebb 100)",page:"Oldal kijelölése",clear:"Kijelölés törlése",keep:"Pontos másolatokból maradjon:",rating:"Legjobbra értékelt",oldest:"Legrégebbi",newest:"Legújabb",auto:"Másolatok jelölése",review:"Kijelöltek törlésének ellenőrzése…",title:"Kijelölt fájlok ellenőrzése",intro:"Csak a felsorolt fájlokat érinti. A pontos másolatok minden csoportjából egy példány megmarad.",count:"Kijelölt fájlok",cancel:"Mégse",trash:"Lomtárba helyezés",permanent:"Végleges törlés",ack:"Tudom, hogy a végleges törlés nem vonható vissza.",empty:"Jelölj ki legalább egy találatot.",limit:"Egyszerre legfeljebb 100 fájl jelölhető ki.",autoDone:"Pontos másolatok kijelölve; minden csoportból egy megmarad.",done:"Törölt fájlok:",partial:"A művelet megállt; a többi találat megmaradt.",keepError:"Pontos másolatból legalább egyet meg kell tartani. Módosítsd a kijelölést.",busy:"Törlés folyamatban…"},
+  EN:{select:"Select for deletion",selected:"selected (maximum 100)",page:"Select page",clear:"Clear selection",keep:"Keep one exact duplicate:",rating:"Highest rated",oldest:"Oldest",newest:"Newest",auto:"Select duplicate extras",review:"Review selected deletions…",title:"Review selected files",intro:"Only listed files are affected. One copy from each exact-duplicate group remains.",count:"Selected files",cancel:"Cancel",trash:"Move to Recycle Bin",permanent:"Delete permanently",ack:"I understand permanent deletion cannot be undone.",empty:"Select at least one result.",limit:"You can select at most 100 files at once.",autoDone:"Duplicate extras selected; one from each group remains.",done:"Files removed:",partial:"Operation stopped; remaining results are still available.",keepError:"At least one exact duplicate must remain. Change the selection.",busy:"Deleting…"},
+  DE:{select:"Zum Löschen wählen",selected:"ausgewählt (maximal 100)",page:"Seite auswählen",clear:"Auswahl löschen",keep:"Exaktes Duplikat behalten:",rating:"Höchste Bewertung",oldest:"Ältestes",newest:"Neuestes",auto:"Duplikate markieren",review:"Ausgewählte Löschungen prüfen…",title:"Ausgewählte Dateien prüfen",intro:"Nur die aufgelisteten Dateien sind betroffen. Eine Kopie jeder Gruppe bleibt.",count:"Ausgewählte Dateien",cancel:"Abbrechen",trash:"In den Papierkorb",permanent:"Endgültig löschen",ack:"Endgültiges Löschen kann nicht rückgängig gemacht werden.",empty:"Mindestens einen Treffer wählen.",limit:"Maximal 100 Dateien gleichzeitig.",autoDone:"Duplikate ausgewählt; eine Kopie bleibt.",done:"Entfernte Dateien:",partial:"Vorgang gestoppt; übrige Treffer bleiben.",keepError:"Mindestens ein Duplikat muss bleiben.",busy:"Wird gelöscht…"},
+  FR:{select:"Sélectionner pour supprimer",selected:"sélectionnés (100 max.)",page:"Sélectionner la page",clear:"Effacer la sélection",keep:"Garder un doublon exact :",rating:"Mieux noté",oldest:"Plus ancien",newest:"Plus récent",auto:"Sélectionner les doublons",review:"Vérifier les suppressions…",title:"Vérifier les fichiers",intro:"Seuls les fichiers listés sont concernés. Une copie de chaque groupe reste.",count:"Fichiers sélectionnés",cancel:"Annuler",trash:"Mettre à la Corbeille",permanent:"Supprimer définitivement",ack:"La suppression définitive est irréversible.",empty:"Sélectionnez au moins un résultat.",limit:"100 fichiers maximum à la fois.",autoDone:"Doublons sélectionnés ; une copie reste.",done:"Fichiers supprimés :",partial:"Opération arrêtée ; autres résultats conservés.",keepError:"Gardez au moins un doublon exact.",busy:"Suppression…"},
+  ES:{select:"Seleccionar para borrar",selected:"seleccionados (máximo 100)",page:"Seleccionar página",clear:"Borrar selección",keep:"Conservar duplicado exacto:",rating:"Mejor valorado",oldest:"Más antiguo",newest:"Más reciente",auto:"Seleccionar duplicados",review:"Revisar eliminación…",title:"Revisar archivos",intro:"Solo afecta a los archivos listados. Queda una copia de cada grupo.",count:"Archivos seleccionados",cancel:"Cancelar",trash:"Enviar a Papelera",permanent:"Eliminar definitivamente",ack:"La eliminación definitiva no se puede deshacer.",empty:"Selecciona al menos un resultado.",limit:"Máximo 100 archivos a la vez.",autoDone:"Duplicados seleccionados; queda una copia.",done:"Archivos eliminados:",partial:"Operación detenida; quedan los demás resultados.",keepError:"Debe quedar un duplicado exacto.",busy:"Eliminando…"},
+  IT:{select:"Seleziona per eliminare",selected:"selezionati (massimo 100)",page:"Seleziona pagina",clear:"Cancella selezione",keep:"Conserva un duplicato:",rating:"Voto più alto",oldest:"Più vecchio",newest:"Più recente",auto:"Seleziona duplicati",review:"Controlla eliminazione…",title:"Controlla i file",intro:"Solo i file elencati saranno interessati. Una copia per gruppo resta.",count:"File selezionati",cancel:"Annulla",trash:"Sposta nel Cestino",permanent:"Elimina definitivamente",ack:"L'eliminazione definitiva è irreversibile.",empty:"Seleziona almeno un risultato.",limit:"Massimo 100 file alla volta.",autoDone:"Duplicati selezionati; una copia resta.",done:"File eliminati:",partial:"Operazione interrotta; gli altri risultati restano.",keepError:"Deve restare un duplicato esatto.",busy:"Eliminazione…"},
+  PT:{select:"Selecionar para eliminar",selected:"selecionados (máximo 100)",page:"Selecionar página",clear:"Limpar seleção",keep:"Manter um duplicado:",rating:"Mais bem avaliado",oldest:"Mais antigo",newest:"Mais recente",auto:"Selecionar duplicados",review:"Rever eliminação…",title:"Rever ficheiros",intro:"Só os ficheiros listados são afetados. Uma cópia de cada grupo permanece.",count:"Ficheiros selecionados",cancel:"Cancelar",trash:"Mover para Reciclagem",permanent:"Eliminar definitivamente",ack:"A eliminação definitiva é irreversível.",empty:"Selecione pelo menos um resultado.",limit:"Máximo de 100 ficheiros de cada vez.",autoDone:"Duplicados selecionados; uma cópia permanece.",done:"Ficheiros eliminados:",partial:"Operação parada; os outros resultados permanecem.",keepError:"Tem de permanecer um duplicado exato.",busy:"A eliminar…"},
+  PL:{select:"Zaznacz do usunięcia",selected:"zaznaczono (maks. 100)",page:"Zaznacz stronę",clear:"Wyczyść wybór",keep:"Zachowaj jedną kopię:",rating:"Najwyżej oceniona",oldest:"Najstarsza",newest:"Najnowsza",auto:"Zaznacz duplikaty",review:"Sprawdź usuwanie…",title:"Sprawdź pliki",intro:"Dotyczy tylko wymienionych plików. Jedna kopia z każdej grupy zostaje.",count:"Wybrane pliki",cancel:"Anuluj",trash:"Przenieś do Kosza",permanent:"Usuń trwale",ack:"Trwałego usunięcia nie można cofnąć.",empty:"Zaznacz co najmniej jeden wynik.",limit:"Maksymalnie 100 plików naraz.",autoDone:"Duplikaty zaznaczone; jedna kopia zostaje.",done:"Usunięte pliki:",partial:"Operacja zatrzymana; reszta wyników pozostała.",keepError:"Co najmniej jedna kopia musi zostać.",busy:"Usuwanie…"}
+};
+const cleanupProtectedCopy = {
+  HU:"A választott szabály alapján ez megmarad:",
+  EN:"Kept according to your chosen rule:",
+  DE:"Nach der gewählten Regel bleibt erhalten:",
+  FR:"Conservé selon la règle choisie :",
+  ES:"Se conserva según la regla elegida:",
+  IT:"Conservato secondo la regola scelta:",
+  PT:"Mantido segundo a regra escolhida:",
+  PL:"Zachowane według wybranej reguły:"
+};
+const cleanupSelectAllCopy = {
+  HU:{all:"Összes kijelölése",first:"Első 100 kijelölése",done:"Minden találat kijelölve.",limited:"Az első 100 találat kijelölve; a többi külön körben kezelhető.",changed:"A találatok közben megváltoztak. Nézd át újra a listát."},
+  EN:{all:"Select all",first:"Select first 100",done:"All results selected.",limited:"The first 100 results are selected; handle the rest separately.",changed:"Results changed during selection. Review the list again."},
+  DE:{all:"Alle auswählen",first:"Erste 100 auswählen",done:"Alle Treffer ausgewählt.",limited:"Die ersten 100 Treffer sind ausgewählt; die übrigen separat bearbeiten.",changed:"Die Treffer haben sich geändert. Liste erneut prüfen."},
+  FR:{all:"Tout sélectionner",first:"Sélectionner les 100 premiers",done:"Tous les résultats sont sélectionnés.",limited:"Les 100 premiers sont sélectionnés ; traitez le reste séparément.",changed:"Les résultats ont changé. Vérifiez à nouveau la liste."},
+  ES:{all:"Seleccionar todos",first:"Seleccionar los primeros 100",done:"Todos los resultados seleccionados.",limited:"Seleccionados los primeros 100; trata el resto por separado.",changed:"Los resultados han cambiado. Revisa la lista."},
+  IT:{all:"Seleziona tutti",first:"Seleziona i primi 100",done:"Tutti i risultati selezionati.",limited:"Selezionati i primi 100; gestisci gli altri separatamente.",changed:"I risultati sono cambiati. Ricontrolla l'elenco."},
+  PT:{all:"Selecionar todos",first:"Selecionar os primeiros 100",done:"Todos os resultados selecionados.",limited:"Selecionados os primeiros 100; trate os restantes em separado.",changed:"Os resultados mudaram. Reveja a lista."},
+  PL:{all:"Zaznacz wszystkie",first:"Zaznacz pierwsze 100",done:"Zaznaczono wszystkie wyniki.",limited:"Zaznaczono pierwsze 100; pozostałe obsłuż osobno.",changed:"Wyniki się zmieniły. Sprawdź listę ponownie."}
+};
+const cleanupGalleryCopy = {
+  HU:{gallery:"Galéria nézet",list:"Lista nézet"},
+  EN:{gallery:"Gallery view",list:"List view"},
+  DE:{gallery:"Galerieansicht",list:"Listenansicht"},
+  FR:{gallery:"Vue galerie",list:"Vue liste"},
+  ES:{gallery:"Vista de galería",list:"Vista de lista"},
+  IT:{gallery:"Vista galleria",list:"Vista elenco"},
+  PT:{gallery:"Vista de galeria",list:"Vista de lista"},
+  PL:{gallery:"Widok galerii",list:"Widok listy"}
+};
+const viewerFieldCopy = {
+  HU:{positive:"Pozitív prompt másolása",negative:"Negatív prompt másolása",copied:"Kimásolva."},
+  EN:{positive:"Copy positive prompt",negative:"Copy negative prompt",copied:"Copied."},
+  DE:{positive:"Positiven Prompt kopieren",negative:"Negativen Prompt kopieren",copied:"Kopiert."},
+  FR:{positive:"Copier le prompt positif",negative:"Copier le prompt négatif",copied:"Copié."},
+  ES:{positive:"Copiar prompt positivo",negative:"Copiar prompt negativo",copied:"Copiado."},
+  IT:{positive:"Copia prompt positivo",negative:"Copia prompt negativo",copied:"Copiato."},
+  PT:{positive:"Copiar prompt positivo",negative:"Copiar prompt negativo",copied:"Copiado."},
+  PL:{positive:"Kopiuj prompt pozytywny",negative:"Kopiuj prompt negatywny",copied:"Skopiowano."}
+};
+const viewerAiCopy={HU:"Kérdezd az MI-t",EN:"Ask AI",DE:"KI fragen",FR:"Demander à l’IA",ES:"Preguntar a la IA",IT:"Chiedi all’IA",PT:"Perguntar à IA",PL:"Zapytaj AI"};
+const viewerWorkbenchCopy={HU:"Küldés a Promptműhelybe",EN:"Send to prompt workbench",DE:"Zur Prompt-Werkstatt",FR:"Envoyer à l'atelier de prompt",ES:"Enviar al taller de prompts",IT:"Invia al laboratorio prompt",PT:"Enviar para a oficina de prompts",PL:"Wyślij do warsztatu promptów"};
 const catalogRecipeCopy = {
   HU:{positive:"Pozitív prompt",negative:"Negatív prompt",copyPrompt:"Prompt másolása",copyRecipe:"Teljes recept másolása",copiedPrompt:"A prompt kimásolva.",copiedRecipe:"A teljes recept kimásolva.",copyFailed:"Nem sikerült a vágólapra másolni.",loading:"Metaadatok beolvasása…",file:"Fájl",source:"Forrás",note:"A recept mentett adatokból készült; a prompt beillesztése önmagában nem állítja vissza a többi beállítást."},
   EN:{positive:"Positive prompt",negative:"Negative prompt",copyPrompt:"Copy prompt",copyRecipe:"Copy full recipe",copiedPrompt:"Prompt copied.",copiedRecipe:"Full recipe copied.",copyFailed:"Could not copy to clipboard.",loading:"Reading metadata…",file:"File",source:"Source",note:"This recipe uses saved metadata; pasting the prompt alone does not restore the other settings."},
@@ -104,6 +206,27 @@ const catalogRecipeCopy = {
   PT:{positive:"Prompt positivo",negative:"Prompt negativo",copyPrompt:"Copiar prompt",copyRecipe:"Copiar receita completa",copiedPrompt:"Prompt copiado.",copiedRecipe:"Receita completa copiada.",copyFailed:"Não foi possível copiar.",loading:"A ler metadados…",file:"Ficheiro",source:"Origem",note:"Esta receita usa dados guardados; colar apenas o prompt não repõe as restantes definições."},
   PL:{positive:"Prompt pozytywny",negative:"Prompt negatywny",copyPrompt:"Kopiuj prompt",copyRecipe:"Kopiuj pełny przepis",copiedPrompt:"Prompt skopiowany.",copiedRecipe:"Pełny przepis skopiowany.",copyFailed:"Nie udało się skopiować.",loading:"Odczytywanie metadanych…",file:"Plik",source:"Źródło",note:"Przepis korzysta z zapisanych danych; wklejenie samego promptu nie przywraca pozostałych ustawień."}
 };
+const passportUiCopy = {
+  HU:{open:"Alkotói útlevél készítése",review:"Megosztás előtt olvasd át és szerkeszd a szöveget. A fájlnevet és a helyi elérési utat nem tesszük bele.",sensitive:"Figyelem: a promptban vagy más adatban személyes adat vagy helyi útvonal lehet.",missing:"Ellenőrzött alapadatok hiánya",copy:"Átnézett útlevél másolása",copied:"Az átnézett útlevél kimásolva."},
+  EN:{open:"Prepare creator passport",review:"Review and edit before sharing. The filename and local path are excluded.",sensitive:"Caution: a prompt or other field may contain personal information or a local path.",missing:"Missing checked basics",copy:"Copy reviewed passport",copied:"Reviewed passport copied."},
+  DE:{open:"Kreativpass erstellen",review:"Vor dem Teilen prüfen und bearbeiten. Dateiname und lokaler Pfad fehlen.",sensitive:"Achtung: Prompt oder andere Felder können persönliche Daten enthalten.",missing:"Wichtige fehlende Daten",copy:"Geprüften Pass kopieren",copied:"Geprüfter Pass kopiert."},
+  FR:{open:"Préparer le passeport créatif",review:"Vérifiez et modifiez avant de partager. Le nom et le chemin du fichier sont exclus.",sensitive:"Attention : le prompt peut contenir des données personnelles ou un chemin local.",missing:"Données importantes manquantes",copy:"Copier après vérification",copied:"Passeport vérifié copié."},
+  ES:{open:"Preparar pasaporte creativo",review:"Revísalo y edítalo antes de compartir. Se excluyen el nombre y la ruta local.",sensitive:"Atención: el prompt puede contener datos personales o rutas locales.",missing:"Datos importantes ausentes",copy:"Copiar tras revisar",copied:"Pasaporte revisado copiado."},
+  IT:{open:"Prepara passaporto creativo",review:"Controlla e modifica prima di condividere. Nome e percorso locale sono esclusi.",sensitive:"Attenzione: il prompt può contenere dati personali o percorsi locali.",missing:"Dati importanti mancanti",copy:"Copia dopo il controllo",copied:"Passaporto controllato copiato."},
+  PT:{open:"Preparar passaporte criativo",review:"Reveja e edite antes de partilhar. Nome e caminho local são excluídos.",sensitive:"Atenção: o prompt pode conter dados pessoais ou caminhos locais.",missing:"Dados importantes em falta",copy:"Copiar após revisão",copied:"Passaporte revisto copiado."},
+  PL:{open:"Przygotuj paszport twórcy",review:"Sprawdź i edytuj przed udostępnieniem. Nazwa i ścieżka pliku są pominięte.",sensitive:"Uwaga: prompt może zawierać dane osobowe lub lokalną ścieżkę.",missing:"Brakujące ważne dane",copy:"Kopiuj po sprawdzeniu",copied:"Sprawdzony paszport skopiowany."}
+};
+const passportSuggestionCopy = {
+  HU:{suggest:"Javasolj javított promptot (helyi AI)",help:"Csak a pozitív prompt kerül a gépeden futó Ollamához, és csak gombnyomásra. Az eredeti prompt érintetlen marad; a javaslatot ellenőrizd.",working:"Helyi javítási javaslat készül…",unavailable:"A helyi Ollama nem érhető el. Az eredeti prompt megmaradt.",modelMissing:"A gemma3:4b modell nincs telepítve az Ollamába.",failed:"Nem sikerült javaslatot készíteni. Az eredeti prompt megmaradt.",tooLong:"Ez a prompt túl hosszú a helyi javításhoz.",ready:"Kész a szerkeszthető javaslat. Nem az eredeti, mentett prompt.",copySuggestion:"Javasolt prompt másolása",copiedSuggestion:"A javasolt prompt kimásolva."},
+  EN:{suggest:"Suggest a corrected prompt (local AI)",help:"Only the positive prompt goes to Ollama on this computer, and only when you click. The saved original stays untouched; review the suggestion.",working:"Preparing a local correction…",unavailable:"Local Ollama is unavailable. The original prompt is unchanged.",modelMissing:"The gemma3:4b model is not installed in Ollama.",failed:"Could not prepare a suggestion. The original prompt is unchanged.",tooLong:"This prompt is too long for local correction.",ready:"Editable suggestion ready. This is not the saved original prompt.",copySuggestion:"Copy suggested prompt",copiedSuggestion:"Suggested prompt copied."},
+  DE:{suggest:"Korrigierten Prompt vorschlagen (lokale KI)",help:"Nur der positive Prompt geht nach dem Klick an Ollama auf diesem Computer. Das Original bleibt unverändert; Vorschlag prüfen.",working:"Lokaler Vorschlag wird erstellt…",unavailable:"Lokales Ollama ist nicht erreichbar. Original unverändert.",modelMissing:"gemma3:4b ist in Ollama nicht installiert.",failed:"Vorschlag fehlgeschlagen. Original unverändert.",tooLong:"Prompt für lokale Korrektur zu lang.",ready:"Bearbeitbarer Vorschlag bereit; nicht das gespeicherte Original.",copySuggestion:"Vorschlag kopieren",copiedSuggestion:"Vorschlag kopiert."},
+  FR:{suggest:"Suggérer un prompt corrigé (IA locale)",help:"Seul le prompt positif est envoyé à Ollama sur cet ordinateur, après votre clic. L'original reste intact ; vérifiez la proposition.",working:"Correction locale en cours…",unavailable:"Ollama local indisponible. Original inchangé.",modelMissing:"gemma3:4b n'est pas installé dans Ollama.",failed:"Suggestion impossible. Original inchangé.",tooLong:"Prompt trop long pour la correction locale.",ready:"Suggestion modifiable prête ; ce n'est pas l'original enregistré.",copySuggestion:"Copier la suggestion",copiedSuggestion:"Suggestion copiée."},
+  ES:{suggest:"Sugerir prompt corregido (IA local)",help:"Solo el prompt positivo va a Ollama en este equipo tras pulsar el botón. El original no cambia; revisa la propuesta.",working:"Preparando corrección local…",unavailable:"Ollama local no está disponible. Original sin cambios.",modelMissing:"gemma3:4b no está instalado en Ollama.",failed:"No se pudo crear la sugerencia. Original sin cambios.",tooLong:"Prompt demasiado largo para corrección local.",ready:"Sugerencia editable lista; no es el original guardado.",copySuggestion:"Copiar sugerencia",copiedSuggestion:"Sugerencia copiada."},
+  IT:{suggest:"Suggerisci prompt corretto (IA locale)",help:"Solo il prompt positivo va a Ollama su questo computer dopo il clic. L'originale resta intatto; controlla la proposta.",working:"Correzione locale in corso…",unavailable:"Ollama locale non disponibile. Originale invariato.",modelMissing:"gemma3:4b non è installato in Ollama.",failed:"Impossibile creare la proposta. Originale invariato.",tooLong:"Prompt troppo lungo per la correzione locale.",ready:"Proposta modificabile pronta; non è l'originale salvato.",copySuggestion:"Copia proposta",copiedSuggestion:"Proposta copiata."},
+  PT:{suggest:"Sugerir prompt corrigido (IA local)",help:"Só o prompt positivo segue para o Ollama neste computador, após clicar. O original fica intacto; reveja a proposta.",working:"A preparar correção local…",unavailable:"Ollama local indisponível. Original inalterado.",modelMissing:"gemma3:4b não está instalado no Ollama.",failed:"Não foi possível criar a sugestão. Original inalterado.",tooLong:"Prompt demasiado longo para correção local.",ready:"Sugestão editável pronta; não é o original guardado.",copySuggestion:"Copiar sugestão",copiedSuggestion:"Sugestão copiada."},
+  PL:{suggest:"Zaproponuj poprawiony prompt (lokalne AI)",help:"Tylko pozytywny prompt trafia do Ollama na tym komputerze po kliknięciu. Oryginał pozostaje bez zmian; sprawdź propozycję.",working:"Tworzenie lokalnej propozycji…",unavailable:"Lokalne Ollama jest niedostępne. Oryginał bez zmian.",modelMissing:"gemma3:4b nie jest zainstalowany w Ollama.",failed:"Nie udało się przygotować propozycji. Oryginał bez zmian.",tooLong:"Prompt jest za długi do lokalnej korekty.",ready:"Edytowalna propozycja gotowa; to nie jest zapisany oryginał.",copySuggestion:"Kopiuj propozycję",copiedSuggestion:"Propozycja skopiowana."}
+};
+const passportLabels = (language="EN") => ({...passportUiCopy.EN,...passportSuggestionCopy.EN,...(passportUiCopy[language] || {}),...(passportSuggestionCopy[language] || {})});
 function recipeLabels(language="EN") {
   return {...catalogCompareCopy.EN,...catalogRecipeCopy.EN,...(catalogCompareCopy[language] || {}),...(catalogRecipeCopy[language] || {})};
 }
@@ -134,9 +257,21 @@ const viewerToolbar = `<div class="catalog-viewer-toolbar">
   <span data-viewer-status role="status"></span>
 </div>`;
 const viewerPrompt = `<section class="catalog-viewer-prompt">
-  <strong data-viewer-positive-title></strong><pre data-viewer-positive></pre>
-  <strong data-viewer-negative-title></strong><pre data-viewer-negative></pre>
-  <div class="catalog-viewer-copy-actions"><button type="button" data-viewer-copy-prompt></button><button type="button" data-viewer-copy-recipe></button></div>
+  <strong data-viewer-positive-title></strong><pre data-viewer-positive></pre><button type="button" class="quiet-action" data-viewer-copy-positive></button>
+  <strong data-viewer-negative-title></strong><pre data-viewer-negative></pre><button type="button" class="quiet-action" data-viewer-copy-negative></button>
+  <div class="catalog-viewer-copy-actions"><button type="button" data-viewer-copy-prompt></button><button type="button" data-viewer-copy-recipe></button><button type="button" data-viewer-passport-open></button><button type="button" data-viewer-ask-ai></button><button type="button" data-viewer-workbench></button></div>
+  <section class="catalog-passport" data-viewer-passport-panel hidden>
+    <p data-viewer-passport-review></p><p data-viewer-passport-missing></p><p data-viewer-passport-warning hidden></p>
+    <textarea data-viewer-passport-text rows="15" spellcheck="false"></textarea>
+    <button type="button" data-viewer-passport-copy></button>
+    <div class="catalog-passport-suggestion">
+      <p data-viewer-passport-help></p>
+      <button type="button" data-viewer-passport-suggest></button>
+      <p data-viewer-passport-suggest-status role="status" aria-live="polite"></p>
+      <textarea data-viewer-passport-suggested-text rows="12" spellcheck="false" hidden></textarea>
+      <button type="button" data-viewer-passport-copy-suggestion hidden></button>
+    </div>
+  </section>
 </section>`;
 
 const journalCopy={
@@ -151,15 +286,15 @@ const journalCopy={
 };
 journalCopy.EN.search="Search experiments";
 journalCopy.HU.search="Keresés a kísérletekben";
-const mixerCopy={
-  EN:{title:"Idea cross-pollinator",help:"Take the scene from one saved work and the visual treatment from the other. This is an editable draft, not an automatic merge of all settings.",image:"Image",video:"Video",swap:"Swap roles",generate:"Mix the ideas",scene:"Scene",look:"Visual direction",use:"Use in editor",copy:"Copy draft",needPrompts:"Both selected files need readable prompts.",confirm:"Replace the current edited prompt with this draft?",used:"Draft loaded for editing.",copied:"Draft copied.",copyError:"Could not copy the draft."},
-  HU:{title:"Ötletkeresztező",help:"Az egyik alkotás jelenetét a másik képi hangulatával ötvözi. Ez szerkeszthető vázlat, nem az összes beállítás automatikus összemosása.",image:"Kép",video:"Videó",swap:"Szerepek felcserélése",generate:"Ötletek keresztezése",scene:"Jelenet",look:"Képi világ",use:"Átvitel a szerkesztőbe",copy:"Vázlat másolása",needPrompts:"Mindkét kijelölt fájlhoz kiolvasható prompt kell.",confirm:"Lecseréljem a most szerkesztett promptot erre a vázlatra?",used:"A vázlat szerkesztésre betöltve.",copied:"A vázlat a vágólapra került.",copyError:"Nem sikerült másolni a vázlatot."},
-  DE:{title:"Ideenkreuzung",help:"Szene aus einem Werk, Bildstimmung aus dem anderen. Bearbeitbarer Entwurf; Einstellungen werden nicht automatisch gemischt.",image:"Bild",video:"Video",swap:"Rollen tauschen",generate:"Ideen mischen",scene:"Szene",look:"Bildsprache",use:"Im Editor verwenden",copy:"Entwurf kopieren",needPrompts:"Beide Dateien brauchen lesbare Prompts.",confirm:"Aktuellen Prompt ersetzen?",used:"Entwurf im Editor.",copied:"Entwurf kopiert.",copyError:"Kopieren fehlgeschlagen."},
-  FR:{title:"Croisement d'idées",help:"La scène d'une œuvre, l'ambiance visuelle de l'autre. Brouillon modifiable; les réglages ne sont pas fusionnés.",image:"Image",video:"Vidéo",swap:"Inverser les rôles",generate:"Croiser les idées",scene:"Scène",look:"Style visuel",use:"Utiliser dans l'éditeur",copy:"Copier le brouillon",needPrompts:"Deux prompts lisibles sont nécessaires.",confirm:"Remplacer le prompt actuel ?",used:"Brouillon dans l'éditeur.",copied:"Brouillon copié.",copyError:"Copie impossible."},
-  ES:{title:"Cruce de ideas",help:"La escena de una obra y el estilo visual de otra. Borrador editable; no mezcla todos los ajustes.",image:"Imagen",video:"Vídeo",swap:"Intercambiar papeles",generate:"Cruzar ideas",scene:"Escena",look:"Estilo visual",use:"Usar en el editor",copy:"Copiar borrador",needPrompts:"Ambos archivos necesitan prompts legibles.",confirm:"¿Reemplazar el prompt actual?",used:"Borrador en el editor.",copied:"Borrador copiado.",copyError:"No se pudo copiar."},
-  IT:{title:"Incrocio di idee",help:"La scena di un'opera e l'atmosfera visiva dell'altra. Bozza modificabile; le impostazioni non vengono unite.",image:"Immagine",video:"Video",swap:"Scambia ruoli",generate:"Incrocia le idee",scene:"Scena",look:"Stile visivo",use:"Usa nell'editor",copy:"Copia bozza",needPrompts:"Servono due prompt leggibili.",confirm:"Sostituire il prompt attuale?",used:"Bozza nell'editor.",copied:"Bozza copiata.",copyError:"Copia non riuscita."},
-  PT:{title:"Cruzamento de ideias",help:"A cena de uma obra e a atmosfera visual de outra. Rascunho editável; não combina todas as definições.",image:"Imagem",video:"Vídeo",swap:"Trocar papéis",generate:"Cruzar ideias",scene:"Cena",look:"Estilo visual",use:"Usar no editor",copy:"Copiar rascunho",needPrompts:"São necessários dois prompts legíveis.",confirm:"Substituir o prompt atual?",used:"Rascunho no editor.",copied:"Rascunho copiado.",copyError:"Não foi possível copiar."},
-  PL:{title:"Krzyżowanie pomysłów",help:"Scena z jednej pracy, nastrój wizualny z drugiej. Edytowalny szkic; ustawienia nie są automatycznie łączone.",image:"Obraz",video:"Wideo",swap:"Zamień role",generate:"Połącz pomysły",scene:"Scena",look:"Styl wizualny",use:"Użyj w edytorze",copy:"Kopiuj szkic",needPrompts:"Oba pliki muszą mieć czytelne prompty.",confirm:"Zastąpić obecny prompt?",used:"Szkic w edytorze.",copied:"Szkic skopiowany.",copyError:"Nie udało się skopiować."}
+const learningCopy={
+  EN:{heading:"What did this comparison teach us?",choose:"Choose which result worked better to get a focused next test.",observed:"You preferred {winner}. Readable differences: {fields}. This records an observation, not the cause of the visual result.",one:"Only one readable difference was found, but hidden factors may still matter.",many:"Several settings changed or some important data is missing; the cause cannot be isolated from this pair.",none:"No reliable difference was found in the readable fields.",nextLabel:"One next experiment (editable)",nextTemplate:"Use {base} as the baseline. In two new runs keep the same model, seed and all other settings; change only {field} to the value from {other}. Compare the feature you preferred.",noSafe:"No safe one-variable change can be proposed from these readable values. Choose one compatible setting yourself and hold the rest fixed.",journalNext:"Next experiment"},
+  HU:{heading:"Mit tanultunk ebből?",choose:"Jelöld meg, melyik eredmény tetszett jobban, és kapsz egy célzott következő próbát.",observed:"A {winner} eredményt választottad. Kiolvasható eltérések: {fields}. Ez megfigyelés, nem bizonyíték arra, mitől lett jobb a látvány.",one:"Csak egy kiolvasható eltérés látszik, de rejtett tényezők is számíthatnak.",many:"Több beállítás változott, vagy fontos adat hiányzik; ebből a párból nem dönthető el az ok.",none:"A kiolvasható adatokban nincs biztos eltérés.",nextLabel:"Egy következő kísérlet (szerkeszthető)",nextTemplate:"Indulj ki a {base} eredményből. Két új futásnál tartsd azonosan a modellt, a seedet és minden más beállítást; csak ezt változtasd a {other} értékére: {field}. Figyeld meg, megmarad-e az a tulajdonság, ami jobban tetszett.",noSafe:"A kiolvasható adatokból nem javasolható biztonsággal egyetlen változó. Válassz egy összeillő beállítást, és minden mást tarts változatlanul.",journalNext:"Következő próba"},
+  DE:{heading:"Was haben wir gelernt?",choose:"Wählen Sie das bessere Ergebnis für einen gezielten nächsten Test.",observed:"Sie bevorzugen {winner}. Lesbare Unterschiede: {fields}. Das ist eine Beobachtung, keine Ursache.",one:"Nur ein lesbarer Unterschied; verborgene Faktoren bleiben möglich.",many:"Mehrere Werte änderten sich oder wichtige Daten fehlen; die Ursache ist nicht isolierbar.",none:"Keine sichere Änderung in den lesbaren Daten.",nextLabel:"Ein nächster Versuch (bearbeitbar)",nextTemplate:"Nehmen Sie {base} als Ausgangspunkt. Halten Sie in zwei neuen Durchläufen Modell, Seed und alle übrigen Werte gleich; ändern Sie nur {field} auf den Wert von {other}. Vergleichen Sie das bevorzugte Merkmal.",noSafe:"Aus diesen Daten ist kein sicherer Einzeltest ableitbar. Wählen Sie selbst eine kompatible Einstellung.",journalNext:"Nächster Versuch"},
+  FR:{heading:"Qu'avons-nous appris ?",choose:"Choisissez le résultat préféré pour proposer un prochain essai ciblé.",observed:"Vous préférez {winner}. Différences lisibles : {fields}. C'est une observation, pas une cause démontrée.",one:"Une seule différence lisible, mais d'autres facteurs peuvent intervenir.",many:"Plusieurs paramètres ont changé ou des données manquent ; la cause ne peut pas être isolée.",none:"Aucune différence fiable dans les données lisibles.",nextLabel:"Prochain essai (modifiable)",nextTemplate:"Prenez {base} comme base. Dans deux nouveaux essais, gardez le même modèle, seed et tous les autres réglages ; changez seulement {field} selon la valeur de {other}. Comparez l'aspect préféré.",noSafe:"Aucun essai à variable unique fiable ne peut être proposé. Choisissez un réglage compatible.",journalNext:"Prochain essai"},
+  ES:{heading:"¿Qué aprendimos?",choose:"Elige el resultado preferido para obtener una prueba concreta.",observed:"Prefieres {winner}. Diferencias legibles: {fields}. Es una observación, no una causa demostrada.",one:"Solo hay una diferencia legible, pero puede haber factores ocultos.",many:"Cambian varios ajustes o faltan datos; no se puede aislar la causa.",none:"No hay diferencias fiables en los datos legibles.",nextLabel:"Siguiente prueba (editable)",nextTemplate:"Usa {base} como base. En dos nuevas generaciones mantén iguales modelo, semilla y demás ajustes; cambia solo {field} al valor de {other}. Compara el rasgo preferido.",noSafe:"No se puede sugerir una prueba segura de una variable. Elige un ajuste compatible.",journalNext:"Siguiente prueba"},
+  IT:{heading:"Che cosa abbiamo imparato?",choose:"Scegli il risultato migliore per una prova mirata.",observed:"Preferisci {winner}. Differenze leggibili: {fields}. È un'osservazione, non una causa dimostrata.",one:"Una sola differenza leggibile, ma possono esserci fattori nascosti.",many:"Sono cambiati più parametri o mancano dati; la causa non è isolabile.",none:"Nessuna differenza affidabile nei dati leggibili.",nextLabel:"Prossima prova (modificabile)",nextTemplate:"Usa {base} come base. In due nuove prove mantieni uguali modello, seed e tutte le altre impostazioni; cambia solo {field} al valore di {other}. Confronta la qualità preferita.",noSafe:"Non è possibile proporre una prova sicura con una variabile. Scegli un'impostazione compatibile.",journalNext:"Prossima prova"},
+  PT:{heading:"O que aprendemos?",choose:"Escolha o melhor resultado para uma próxima prova focada.",observed:"Prefere {winner}. Diferenças legíveis: {fields}. É uma observação, não uma causa comprovada.",one:"Só uma diferença legível, mas podem existir fatores ocultos.",many:"Várias definições mudaram ou faltam dados; a causa não pode ser isolada.",none:"Sem diferença fiável nos dados legíveis.",nextLabel:"Próxima prova (editável)",nextTemplate:"Use {base} como base. Em duas novas execuções mantenha modelo, seed e restantes definições iguais; altere apenas {field} para o valor de {other}. Compare o aspeto preferido.",noSafe:"Não é possível propor uma prova segura de uma variável. Escolha uma definição compatível.",journalNext:"Próxima prova"},
+  PL:{heading:"Czego się nauczyliśmy?",choose:"Wybierz lepszy wynik, aby otrzymać jeden następny test.",observed:"Wybierasz {winner}. Odczytane różnice: {fields}. To obserwacja, nie dowód przyczyny.",one:"Tylko jedna odczytana różnica, ale mogą istnieć ukryte czynniki.",many:"Zmieniło się kilka ustawień lub brakuje danych; nie można wskazać przyczyny.",none:"Brak pewnej różnicy w odczytanych danych.",nextLabel:"Następna próba (edytowalna)",nextTemplate:"Użyj {base} jako punktu wyjścia. W dwóch nowych próbach zachowaj ten sam model, seed i inne ustawienia; zmień tylko {field} na wartość z {other}. Porównaj preferowaną cechę.",noSafe:"Nie można bezpiecznie zaproponować próby z jedną zmienną. Wybierz zgodne ustawienie.",journalNext:"Następna próba"}
 };
 export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVideo, getLinkVideoLabel }) {
   const host = document.querySelector(".result-column");
@@ -168,25 +303,56 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     <div class="catalog-body"><p id="catalog-intro"></p><div id="catalog-roots" class="catalog-roots"></div>
       <div class="catalog-add"><input id="catalog-root-input" maxlength="400"><button type="button" id="catalog-add-root" class="quiet-action"></button></div>
       <button type="button" id="catalog-scan" class="secondary-action"></button><p id="catalog-progress" role="status" aria-live="polite"></p>
+      <label class="catalog-thumbnail-toggle"><input id="catalog-auto-scan" type="checkbox"><span id="catalog-auto-scan-label"></span></label>
       <label class="catalog-thumbnail-toggle"><input id="catalog-show-thumbnails" type="checkbox"><span id="catalog-show-thumbnails-label"></span></label>
       <div class="catalog-compare-picker"><strong id="catalog-compare-picker-title"></strong><span id="catalog-compare-slot-a"></span><span id="catalog-compare-slot-b"></span>
-        <button type="button" id="catalog-compare-open" class="secondary-action" disabled></button><button type="button" id="catalog-mixer-open" class="secondary-action" disabled></button><button type="button" id="catalog-compare-clear" class="quiet-action"></button></div>
+        <button type="button" id="catalog-compare-open" class="secondary-action" disabled></button><button type="button" id="catalog-compare-clear" class="quiet-action"></button></div>
       <details id="catalog-journal" class="catalog-journal"><summary id="catalog-journal-summary"></summary>
         <p id="catalog-journal-help"></p><input id="catalog-journal-query" type="search"><div class="catalog-journal-tools">
           <button type="button" id="catalog-journal-export" class="quiet-action"></button>
           <button type="button" id="catalog-journal-import" class="quiet-action"></button>
           <input id="catalog-journal-file" type="file" accept=".json,application/json" hidden>
         </div><p id="catalog-journal-status" role="status"></p><div id="catalog-journal-list"></div></details>
+      <details id="catalog-cleanup" class="catalog-journal"><summary id="catalog-cleanup-title"></summary>
+        <p id="catalog-cleanup-help"></p><div class="catalog-actions"><button type="button" id="catalog-cleanup-start"></button><button type="button" id="catalog-cleanup-cancel" hidden></button></div>
+        <div id="catalog-cleanup-batch-tools" class="catalog-cleanup-batch-tools" hidden>
+          <strong id="catalog-cleanup-selected-count"></strong>
+          <button type="button" id="catalog-cleanup-select-page" class="quiet-action"></button>
+          <button type="button" id="catalog-cleanup-select-all" class="quiet-action"></button>
+          <button type="button" id="catalog-cleanup-clear-selection" class="quiet-action"></button>
+          <label><span id="catalog-cleanup-keep-label"></span><select id="catalog-cleanup-keep-rule"><option value="rating"></option><option value="oldest"></option><option value="newest"></option></select></label>
+          <button type="button" id="catalog-cleanup-auto-select" class="quiet-action"></button>
+          <button type="button" id="catalog-cleanup-batch-review" class="secondary-action"></button>
+        </div>
+        <p id="catalog-cleanup-status" role="status" aria-live="polite"></p>
+        <div class="catalog-cleanup-view-tools"><button type="button" id="catalog-cleanup-view-toggle" class="quiet-action"></button></div>
+        <div id="catalog-cleanup-results" class="catalog-results"></div>
+        <div class="catalog-pager"><button type="button" id="catalog-cleanup-prev" class="quiet-action"></button><span id="catalog-cleanup-page"></span><button type="button" id="catalog-cleanup-next" class="quiet-action"></button></div>
+      </details>
       <div class="catalog-filters"><input id="catalog-query" type="search" maxlength="200"><select id="catalog-kind"></select><select id="catalog-prompt-filter"></select><select id="catalog-root"></select></div>
+      <div class="catalog-date-filters"><span id="catalog-date-heading"></span><select id="catalog-date-preset"></select><label><span id="catalog-date-from-label"></span><input id="catalog-date-from" type="date"></label><label><span id="catalog-date-to-label"></span><input id="catalog-date-to" type="date"></label></div>
       <div class="catalog-organize"><select id="catalog-category-filter"></select><select id="catalog-rating-filter"></select>
         <input id="catalog-new-category" maxlength="50"><button type="button" id="catalog-add-category" class="quiet-action"></button></div>
-      <p id="catalog-count"></p><p id="catalog-marked-count"></p><div id="catalog-results" class="catalog-results"></div>
-      <div class="catalog-pager"><button type="button" id="catalog-prev" class="quiet-action"></button><span id="catalog-page"></span><button type="button" id="catalog-next" class="quiet-action"></button></div></div>
+      <div id="catalog-gallery-toolbar" class="catalog-gallery-toolbar"><button type="button" id="catalog-gallery-toggle" class="quiet-action"></button><div id="catalog-gallery-day-controls" class="catalog-gallery-day-controls" hidden><button type="button" id="catalog-gallery-prev-day" class="quiet-action"></button><label><span id="catalog-gallery-day-label"></span><input id="catalog-gallery-day" type="date"></label><button type="button" id="catalog-gallery-next-day" class="quiet-action"></button><span id="catalog-gallery-hint"></span></div></div>
+      <p id="catalog-count"></p><p id="catalog-marked-count"></p>
+      <div id="catalog-pager-top" class="catalog-pager catalog-pager-top"><button type="button" id="catalog-first-top" class="quiet-action" hidden></button><button type="button" id="catalog-prev-top" class="quiet-action"></button><span id="catalog-page-top"></span><button type="button" id="catalog-next-top" class="quiet-action"></button><button type="button" id="catalog-last-top" class="quiet-action" hidden></button></div>
+      <div id="catalog-results" class="catalog-results"></div>
+      <div id="catalog-pager" class="catalog-pager"><button type="button" id="catalog-first" class="quiet-action" hidden></button><button type="button" id="catalog-prev" class="quiet-action"></button><span id="catalog-page"></span><button type="button" id="catalog-next" class="quiet-action"></button><button type="button" id="catalog-last" class="quiet-action" hidden></button></div></div>
     <dialog id="catalog-delete-dialog" class="catalog-delete-dialog" aria-labelledby="catalog-delete-title">
       <h3 id="catalog-delete-title"></h3><p id="catalog-delete-explanation"></p><ul id="catalog-delete-files"></ul>
       <label class="catalog-delete-ack"><input id="catalog-delete-ack" type="checkbox"><span id="catalog-delete-ack-label"></span></label>
       <p id="catalog-delete-error" role="alert"></p><div class="catalog-delete-actions">
         <button type="button" id="catalog-delete-cancel"></button><button type="button" id="catalog-delete-trash"></button><button type="button" id="catalog-delete-permanent"></button>
+      </div></dialog>
+    <dialog id="catalog-cleanup-batch-dialog" class="catalog-delete-dialog" aria-labelledby="catalog-cleanup-batch-title">
+      <h3 id="catalog-cleanup-batch-title"></h3><p id="catalog-cleanup-batch-intro"></p>
+      <p id="catalog-cleanup-batch-protected" hidden></p>
+      <strong id="catalog-cleanup-batch-count"></strong><ul id="catalog-cleanup-batch-files"></ul>
+      <label class="catalog-delete-ack"><input id="catalog-cleanup-batch-ack" type="checkbox"><span id="catalog-cleanup-batch-ack-label"></span></label>
+      <p id="catalog-cleanup-batch-error" role="alert"></p><div class="catalog-delete-actions">
+        <button type="button" id="catalog-cleanup-batch-cancel"></button>
+        <button type="button" id="catalog-cleanup-batch-trash"></button>
+        <button type="button" id="catalog-cleanup-batch-permanent"></button>
       </div></dialog>
     <dialog id="catalog-image-dialog" class="catalog-image-dialog" aria-labelledby="catalog-image-title">
       <div class="catalog-image-heading"><h3 id="catalog-image-title"></h3><button type="button" id="catalog-image-close"></button></div>
@@ -208,16 +374,17 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       <h4 id="catalog-compare-tradeoffs-title"></h4><ul id="catalog-compare-tradeoffs"></ul>
       <h4 id="catalog-compare-visual-title"></h4><button type="button" id="catalog-compare-visual-run"></button><p id="catalog-compare-visual-status" role="status"></p>
       <div id="catalog-compare-visual-result"></div><p id="catalog-compare-disclaimer"></p>
-      <section id="catalog-idea-mixer" class="catalog-idea-mixer"><h4 id="catalog-mixer-title"></h4><p id="catalog-mixer-help"></p>
-        <div class="catalog-mixer-controls"><select id="catalog-mixer-kind"></select><button type="button" id="catalog-mixer-swap" class="quiet-action"></button><button type="button" id="catalog-mixer-generate" class="secondary-action"></button></div>
-        <p id="catalog-mixer-sources"></p><textarea id="catalog-mixer-output" rows="5"></textarea>
-        <div class="catalog-mixer-actions"><button type="button" id="catalog-mixer-use" class="secondary-action"></button><button type="button" id="catalog-mixer-copy" class="quiet-action"></button></div>
-        <p id="catalog-mixer-status" role="status" aria-live="polite"></p>
-      </section>
       <section class="catalog-experiment-save"><h4 id="catalog-experiment-heading"></h4>
         <input id="catalog-experiment-title" maxlength="120">
         <select id="catalog-experiment-preferred"></select>
         <textarea id="catalog-experiment-reason" maxlength="1200" rows="3"></textarea>
+        <div class="catalog-learning-plan" aria-live="polite">
+          <h5 id="catalog-learning-heading"></h5>
+          <p id="catalog-learning-summary"></p>
+          <p id="catalog-learning-caution"></p>
+          <label id="catalog-learning-next-label" for="catalog-experiment-next-test"></label>
+          <textarea id="catalog-experiment-next-test" maxlength="1200" rows="3"></textarea>
+        </div>
         <div class="catalog-experiment-times"><input id="catalog-experiment-time-a" type="number" min="0" max="10000" step="0.01">
           <input id="catalog-experiment-time-b" type="number" min="0" max="10000" step="0.01"></div>
         <button type="button" id="catalog-experiment-save" class="secondary-action"></button><p id="catalog-experiment-status" role="status"></p>
@@ -225,10 +392,16 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     </dialog>`;
   host.insertBefore(panel, host.querySelector(".side-tip"));
   const el = (id) => panel.querySelector(`#${id}`), t = () => ({ ...catalogCopy.EN, ...catalogPromptCopy.EN, ...catalogOrganizeCopy.EN,
-    ...(catalogCopy[getLanguage()] || {}), ...(catalogPromptCopy[getLanguage()] || {}), ...(catalogOrganizeCopy[getLanguage()] || {}) });
+    ...catalogDateCopy.EN, ...catalogGalleryCopy.EN, ...catalogPageJumpCopy.EN, ...(catalogCopy[getLanguage()] || {}), ...(catalogPromptCopy[getLanguage()] || {}), ...(catalogOrganizeCopy[getLanguage()] || {}), ...(catalogDateCopy[getLanguage()] || {}), ...(catalogGalleryCopy[getLanguage()] || {}), ...(catalogPageJumpCopy[getLanguage()] || {}) });
   const td = () => ({ ...catalogDeleteCopy.EN, ...(catalogDeleteCopy[getLanguage()] || {}) });
   const query = el("catalog-query"), kind = el("catalog-kind"), root = el("catalog-root"), promptFilter = el("catalog-prompt-filter"),
     categoryFilter = el("catalog-category-filter"), ratingFilter = el("catalog-rating-filter"), results = el("catalog-results");
+  const datePreset=el("catalog-date-preset"), dateFrom=el("catalog-date-from"), dateTo=el("catalog-date-to");
+  const galleryToggle=el("catalog-gallery-toggle"), galleryDay=el("catalog-gallery-day"), galleryControls=el("catalog-gallery-day-controls");
+  const autoScanToggle=el("catalog-auto-scan"), autoScanIntervalMs=15*60*1000;
+  const autoScanStorageKey="artoftomworks.v2.catalogAutoScan";
+  try { autoScanToggle.checked=localStorage.getItem(autoScanStorageKey)!=="false"; }
+  catch { autoScanToggle.checked=true; }
   const deleteDialog = el("catalog-delete-dialog");
   const imageDialog = el("catalog-image-dialog");
   const videoDialog = el("catalog-video-dialog");
@@ -238,22 +411,279 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   const tb = () => ({ ...catalogBridgeCopy.EN, ...(catalogBridgeCopy[getLanguage()] || {}) });
   const tv = () => ({ ...catalogVideoCopy.EN, ...(catalogVideoCopy[getLanguage()] || {}) });
   const tc = () => ({ ...catalogCompareCopy.EN, ...(catalogCompareCopy[getLanguage()] || {}) });
-  const tm = () => mixerCopy[getLanguage()] || mixerCopy.EN;
   const tj = () => ({ ...journalCopy.EN, ...(journalCopy[getLanguage()] || {}) });
+  const tl = () => ({ ...learningCopy.EN, ...(learningCopy[getLanguage()] || {}) });
   const tw = () => ({ ...catalogViewerCopy.EN, ...(catalogViewerCopy[getLanguage()] || {}) });
   const tr = () => recipeLabels(getLanguage());
   let status = null, page = 0, total = 0, timer = null, delay = null, deletionPlan = null, deleteBusy = false, deletePreparing = false, previewItem = null;
+  let scanRequestPending=false, scanMonitorActive=false, pendingCatalogRefresh=false, nextAutoScanAt=Date.now()+autoScanIntervalMs;
+  let galleryMode=false, savedDateFilter=null, searchRevision=0;
   let visibleItems = [], viewerItem = null, viewerIndex = 0, viewerBusy = false;
+  let viewerReturn = null;
+  let passportController = null, passportRevision = 0;
   const marked = new Set();
   const selected = { A:null, B:null };
   let compareVisible = false, compareRevision = 0, compareBusy = false, visualController = null;
-  let mixerSwapped = false;
+  let learningNextManual=false;
   const api = async (path, options) => {
     const response = await fetch(path,options);
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || String(response.status));
     return response.json();
   };
   const mediaUrl = (item) => `/api/catalog/media?id=${encodeURIComponent(item.id)}`;
+  const cleanupT = () => catalogCleanupCopy[getLanguage()] || catalogCleanupCopy.EN;
+  const cleanupB = () => cleanupBatchCopy[getLanguage()] || cleanupBatchCopy.EN;
+  const cleanupG = () => cleanupGalleryCopy[getLanguage()] || cleanupGalleryCopy.EN;
+  let cleanupPage=0, cleanupTotal=0, cleanupScanStatus=null, cleanupRows=[], cleanupTimer=null;
+  let cleanupSelected=new Set(), cleanupFinishedAt=null, cleanupBatchPlan=null, cleanupBatchBusy=false;
+  const cleanupGalleryStorageKey="artoftomworks.v2.cleanupGalleryView";
+  let cleanupGalleryMode=true;
+  try { cleanupGalleryMode=localStorage.getItem(cleanupGalleryStorageKey)!=="list"; } catch {}
+  const cleanupBatchDialog=el("catalog-cleanup-batch-dialog");
+  function cleanupBatchMessage(error) {
+    const message=String(error?.message || error);
+    return /Keep at least one|remaining copy/.test(message) ? cleanupB().keepError : message;
+  }
+  function renderCleanup() {
+    const labels=cleanupT();
+    const batch=cleanupB();
+    for (const [id,key] of [["catalog-cleanup-title","title"],["catalog-cleanup-help","help"],["catalog-cleanup-start","start"],
+      ["catalog-cleanup-cancel","cancel"],["catalog-cleanup-prev","previous"],["catalog-cleanup-next","next"]])
+      el(id).textContent=labels[key];
+    const s=cleanupScanStatus;
+    for (const [id,key] of [["catalog-cleanup-select-page","page"],["catalog-cleanup-clear-selection","clear"],
+      ["catalog-cleanup-keep-label","keep"],["catalog-cleanup-auto-select","auto"],["catalog-cleanup-batch-review","review"]])
+      el(id).textContent=batch[key];
+    for (const [value,key] of [["rating","rating"],["oldest","oldest"],["newest","newest"]])
+      el("catalog-cleanup-keep-rule").querySelector('option[value="'+value+'"]').textContent=batch[key];
+    el("catalog-cleanup-selected-count").textContent=cleanupSelected.size+" "+batch.selected;
+    el("catalog-cleanup-select-all").textContent=(cleanupSelectAllCopy[getLanguage()] || cleanupSelectAllCopy.EN)[cleanupTotal>100?"first":"all"];
+    el("catalog-cleanup-batch-tools").hidden=!s?.finishedAt || Boolean(s?.running || s?.message || !cleanupTotal);
+    el("catalog-cleanup-batch-review").textContent="⚠ "+batch.review;
+    el("catalog-cleanup-batch-review").disabled=!cleanupSelected.size;
+    el("catalog-cleanup-clear-selection").disabled=!cleanupSelected.size;
+    el("catalog-cleanup-start").disabled=Boolean(s?.running || status?.scan?.running);
+    el("catalog-cleanup-cancel").hidden=!s?.running;
+    let message=labels.idle;
+    if (s?.running) message=labels.working + ": " + s.checked + " / " + s.total + " · " + labels.hashed + ": " + s.hashed + " / " + s.hashTotal;
+    else if (s?.message === "cancelled") message=labels.cancelled;
+    else if (s?.message) message=labels.error + " " + s.message;
+    else if (s?.finishedAt) message=labels.done + " · " + labels.review + cleanupTotal + " · " +
+      s.skippedRecent + " " + labels.recent + " · " + s.skippedChanged + " " + labels.changed +
+      " · " + s.unreadable + " " + labels.unreadable;
+    el("catalog-cleanup-status").textContent=message;
+    const host=el("catalog-cleanup-results");
+    el("catalog-cleanup-view-toggle").textContent=cleanupGalleryMode?cleanupG().list:cleanupG().gallery;
+    el("catalog-cleanup-view-toggle").hidden=!s?.finishedAt || Boolean(s?.running || s?.message || !cleanupTotal);
+    host.classList.toggle("catalog-cleanup-gallery-mode",cleanupGalleryMode);
+    cleanupPosterObserver?.disconnect();
+    host.replaceChildren();
+    if (s?.finishedAt && !s.running && !s.message && cleanupTotal===0) {
+      const empty=document.createElement("p"); empty.textContent=labels.none; host.append(empty);
+    }
+    for (const candidate of cleanupRows) {
+      const item=candidate.item, row=document.createElement("div"); row.className="catalog-item catalog-cleanup-card";
+      row.title=item.path;
+      row.classList.toggle("catalog-cleanup-selected",cleanupSelected.has(item.id));
+      row.classList.add(candidate.type==="duplicate"?"catalog-cleanup-duplicate":"catalog-cleanup-suspect");
+      const choose=document.createElement("input"); choose.type="checkbox"; choose.className="catalog-cleanup-checkbox";
+      choose.checked=cleanupSelected.has(item.id); choose.setAttribute("aria-label",batch.select+": "+item.filename);
+      choose.addEventListener("change",() => {
+        if (choose.checked && cleanupSelected.size>=100) {
+          choose.checked=false; el("catalog-cleanup-status").textContent=batch.limit; return;
+        }
+        if (choose.checked) cleanupSelected.add(item.id); else cleanupSelected.delete(item.id);
+        row.classList.toggle("catalog-cleanup-selected",choose.checked);
+        el("catalog-cleanup-selected-count").textContent=cleanupSelected.size+" "+batch.selected;
+        el("catalog-cleanup-batch-review").disabled=!cleanupSelected.size;
+        el("catalog-cleanup-clear-selection").disabled=!cleanupSelected.size;
+      });
+      const media=document.createElement("div"); media.className="catalog-media";
+      if (item.kind==="image") {
+        const open=document.createElement("button"); open.type="button"; open.className="catalog-cleanup-thumbnail";
+        open.setAttribute("aria-label",labels.preview+": "+item.filename);
+        const image=document.createElement("img"); image.loading="lazy"; image.alt=item.filename; image.src=mediaUrl(item);
+        image.addEventListener("error",() => { image.remove(); open.textContent="⚠"; });
+        open.append(image); open.addEventListener("click",() => showImage(item)); media.append(open);
+      } else {
+        const open=document.createElement("button"); open.type="button"; open.className="catalog-cleanup-thumbnail";
+        open.setAttribute("aria-label",labels.preview+": "+item.filename);
+        const frame=document.createElement("img"); frame.alt=""; frame.hidden=true;
+        const symbol=document.createElement("span"); symbol.className="catalog-cleanup-video-symbol"; symbol.textContent="▶";
+        open.append(frame,symbol); open.addEventListener("click",() => showVideo(item)); media.append(open);
+        queueCleanupPoster({item,image:frame,symbol,button:open});
+      }
+      const detail=document.createElement("div"); detail.className="catalog-detail";
+      const title=document.createElement("strong"); title.textContent=(candidate.type==="duplicate" ? labels.duplicate : labels.suspect) +
+        " · " + item.filename + (item.rating ? " · " + item.rating + "★" : "") + (item.category ? " · " + item.category : "");
+      const reason=document.createElement("p");
+      reason.textContent=candidate.type==="duplicate" ? labels.exact + " (" + candidate.groupSize + ")" : labels[candidate.reason] || labels.suspect;
+      const path=document.createElement("small"); path.textContent=item.path; path.title=item.path;
+      const actions=document.createElement("div"); actions.className="catalog-actions";
+      const preview=document.createElement("button"); preview.type="button"; preview.textContent=labels.preview;
+      preview.addEventListener("click",() => item.kind==="image" ? showImage(item) : showVideo(item));
+      const remove=document.createElement("button"); remove.type="button"; remove.textContent=labels.remove;
+      remove.addEventListener("click",() => { void openDelete(item); });
+      actions.append(preview,remove); detail.append(title,reason,path,actions); row.append(choose,media,detail); host.append(row);
+    }
+    const pages=Math.max(1,Math.ceil(cleanupTotal/24));
+    el("catalog-cleanup-page").textContent=labels.page + " " + (cleanupPage+1) + " / " + pages;
+    el("catalog-cleanup-prev").disabled=cleanupPage===0;
+    el("catalog-cleanup-next").disabled=(cleanupPage+1)*24>=cleanupTotal;
+  }
+  async function refreshCleanup() {
+    if (cleanupTimer) { clearTimeout(cleanupTimer); cleanupTimer=null; }
+    try {
+      cleanupScanStatus=await api("/api/catalog/cleanup/status");
+      if (cleanupFinishedAt!==cleanupScanStatus.finishedAt) {
+        cleanupSelected.clear(); cleanupFinishedAt=cleanupScanStatus.finishedAt;
+      }
+      if (!cleanupScanStatus.running && cleanupScanStatus.finishedAt && !cleanupScanStatus.message) {
+        let response=await api("/api/catalog/cleanup/results?page=" + cleanupPage);
+        if (cleanupPage>0 && cleanupPage*24>=response.total) {
+          cleanupPage=Math.max(0,Math.ceil(response.total/24)-1);
+          response=await api("/api/catalog/cleanup/results?page=" + cleanupPage);
+        }
+        cleanupTotal=response.total; cleanupRows=response.results;
+      } else { cleanupTotal=0; cleanupRows=[]; }
+      renderCleanup();
+      if (cleanupScanStatus.running) cleanupTimer=setTimeout(() => { void refreshCleanup(); },1200);
+    } catch(error) { el("catalog-cleanup-status").textContent=cleanupT().error + " " + error.message; }
+  }
+  el("catalog-cleanup-start").addEventListener("click",async () => {
+    try {
+      const response=await api("/api/catalog/cleanup/start",{method:"POST",headers:{"X-Prompt-Studio-Action":"cleanup-review"}});
+      if (response.changed) { cleanupPage=0; el("catalog-cleanup").open=true; }
+      await refreshCleanup();
+    } catch(error) { el("catalog-cleanup-status").textContent=cleanupT().error + " " + error.message; }
+  });
+  el("catalog-cleanup-cancel").addEventListener("click",async () => {
+    try { await api("/api/catalog/cleanup/cancel",{method:"POST",headers:{"X-Prompt-Studio-Action":"cleanup-review"}}); await refreshCleanup(); }
+    catch(error) { el("catalog-cleanup-status").textContent=cleanupT().error + " " + error.message; }
+  });
+  el("catalog-cleanup-prev").addEventListener("click",() => { if (cleanupPage>0) { cleanupPage--; void refreshCleanup(); } });
+  el("catalog-cleanup-next").addEventListener("click",() => { if ((cleanupPage+1)*24<cleanupTotal) { cleanupPage++; void refreshCleanup(); } });
+  el("catalog-cleanup-view-toggle").addEventListener("click",() => {
+    cleanupGalleryMode=!cleanupGalleryMode;
+    try { localStorage.setItem(cleanupGalleryStorageKey,cleanupGalleryMode?"gallery":"list"); } catch {}
+    renderCleanup();
+  });
+  el("catalog-cleanup-select-page").addEventListener("click",() => {
+    for (const candidate of cleanupRows) {
+      if (cleanupSelected.size>=100) break;
+      cleanupSelected.add(candidate.id);
+    }
+    renderCleanup();
+    if (cleanupSelected.size>=100) el("catalog-cleanup-status").textContent=cleanupB().limit;
+  });
+  el("catalog-cleanup-select-all").addEventListener("click",async () => {
+    const button=el("catalog-cleanup-select-all");
+    const copy=cleanupSelectAllCopy[getLanguage()] || cleanupSelectAllCopy.EN;
+    const generation=cleanupScanStatus?.generation;
+    button.disabled=true;
+    try {
+      const total=cleanupTotal;
+      const count=Math.min(100,total);
+      const ids=[];
+      for (let pageIndex=0; pageIndex<Math.ceil(count/24); pageIndex++) {
+        const response=await api("/api/catalog/cleanup/results?page="+pageIndex);
+        if (response.total!==total) throw new Error(copy.changed);
+        ids.push(...response.results.map(row=>row.id));
+      }
+      const current=await api("/api/catalog/cleanup/status");
+      if (current.running || current.message || current.generation!==generation || ids.length<count)
+        throw new Error(copy.changed);
+      cleanupSelected=new Set(ids.slice(0,100));
+      renderCleanup();
+      el("catalog-cleanup-status").textContent=total>100 ? copy.limited : copy.done;
+    } catch(error) {
+      await refreshCleanup();
+      el("catalog-cleanup-status").textContent=error.message || copy.changed;
+    } finally { button.disabled=false; }
+  });
+  el("catalog-cleanup-clear-selection").addEventListener("click",() => { cleanupSelected.clear(); renderCleanup(); });
+  el("catalog-cleanup-auto-select").addEventListener("click",async () => {
+    try {
+      const rule=el("catalog-cleanup-keep-rule").value;
+      const result=await api("/api/catalog/cleanup/auto-selection?keep="+encodeURIComponent(rule));
+      cleanupSelected=new Set(result.ids); renderCleanup();
+      el("catalog-cleanup-status").textContent=cleanupB().autoDone+
+        (result.totalExtras>result.ids.length ? " "+cleanupB().limit : "");
+    } catch(error) { el("catalog-cleanup-status").textContent=cleanupBatchMessage(error); }
+  });
+  function renderCleanupBatchDialog() {
+    const b=cleanupB();
+    for (const [id,key] of [["catalog-cleanup-batch-title","title"],["catalog-cleanup-batch-intro","intro"],
+      ["catalog-cleanup-batch-ack-label","ack"],["catalog-cleanup-batch-cancel","cancel"],
+      ["catalog-cleanup-batch-trash","trash"],["catalog-cleanup-batch-permanent","permanent"]])
+      el(id).textContent=b[key];
+    if (cleanupBatchPlan) {
+      const protectedFiles=cleanupBatchPlan.protectedFiles || [];
+      el("catalog-cleanup-batch-protected").hidden=!protectedFiles.length;
+      el("catalog-cleanup-batch-protected").textContent=protectedFiles.length ?
+        (cleanupProtectedCopy[getLanguage()] || cleanupProtectedCopy.EN)+" "+
+        protectedFiles.map(file=>file.filename).join(", ") : "";
+      el("catalog-cleanup-batch-count").textContent=b.count+": "+cleanupBatchPlan.count;
+      el("catalog-cleanup-batch-files").replaceChildren(...cleanupBatchPlan.files.map(file => {
+        const line=document.createElement("li"); line.textContent=file.path; return line;
+      }));
+    }
+  }
+  el("catalog-cleanup-batch-review").addEventListener("click",async () => {
+    if (!cleanupSelected.size || cleanupBatchBusy) {
+      if (!cleanupSelected.size) el("catalog-cleanup-status").textContent=cleanupB().empty;
+      return;
+    }
+    try {
+      cleanupBatchPlan=await api("/api/catalog/cleanup/batch-preview",{
+        method:"POST",headers:{"Content-Type":"application/json","X-Prompt-Studio-Action":"cleanup-batch-preview"},
+        body:JSON.stringify({ids:[...cleanupSelected],keep:el("catalog-cleanup-keep-rule").value})
+      });
+      cleanupSelected=new Set(cleanupBatchPlan.ids);
+      renderCleanup();
+      el("catalog-cleanup-batch-ack").checked=false;
+      el("catalog-cleanup-batch-permanent").disabled=true;
+      el("catalog-cleanup-batch-error").textContent="";
+      renderCleanupBatchDialog(); cleanupBatchDialog.showModal();
+    } catch(error) { el("catalog-cleanup-status").textContent=cleanupBatchMessage(error); }
+  });
+  el("catalog-cleanup-batch-ack").addEventListener("change",() => {
+    el("catalog-cleanup-batch-permanent").disabled=!el("catalog-cleanup-batch-ack").checked || cleanupBatchBusy;
+  });
+  el("catalog-cleanup-batch-cancel").addEventListener("click",() => { if (!cleanupBatchBusy) cleanupBatchDialog.close(); });
+  cleanupBatchDialog.addEventListener("cancel",event => { if (cleanupBatchBusy) event.preventDefault(); });
+  cleanupBatchDialog.addEventListener("close",() => { cleanupBatchPlan=null; });
+  async function confirmCleanupBatch(mode) {
+    if (!cleanupBatchPlan || cleanupBatchBusy ||
+        (mode==="permanent" && !el("catalog-cleanup-batch-ack").checked)) return;
+    cleanupBatchBusy=true;
+    el("catalog-cleanup-batch-error").textContent=cleanupB().busy;
+    for (const id of ["catalog-cleanup-batch-cancel","catalog-cleanup-batch-trash","catalog-cleanup-batch-permanent"])
+      el(id).disabled=true;
+    try {
+      const result=await api("/api/catalog/cleanup/batch-delete",{
+        method:"POST",headers:{"Content-Type":"application/json","X-Prompt-Studio-Action":"cleanup-batch-delete"},
+        body:JSON.stringify({token:cleanupBatchPlan.token,mode})
+      });
+      cleanupBatchDialog.close();
+      for (const id of result.deleted) {
+        cleanupSelected.delete(id); marked.delete(id);
+        for (const side of ["A","B"]) if (selected[side]?.id===id) selected[side]=null;
+        if (viewerItem?.id===id) { if (imageDialog.open) imageDialog.close(); if (videoDialog.open) videoDialog.close(); viewerItem=null; }
+      }
+      await refreshStatus(); await search(); await refreshCleanup();
+      el("catalog-cleanup-status").textContent=cleanupB().done+" "+result.deleted.length+" / "+result.requested+
+        (result.failed ? " "+cleanupB().partial+" "+result.failed : "")+
+        (result.warnings.length ? " "+result.warnings.join("; ") : "");
+    } catch(error) { el("catalog-cleanup-batch-error").textContent=cleanupBatchMessage(error); }
+    finally {
+      cleanupBatchBusy=false;
+      for (const id of ["catalog-cleanup-batch-cancel","catalog-cleanup-batch-trash"]) el(id).disabled=false;
+      el("catalog-cleanup-batch-permanent").disabled=!el("catalog-cleanup-batch-ack").checked;
+    }
+  }
+  el("catalog-cleanup-batch-trash").addEventListener("click",() => { void confirmCleanupBatch("trash"); });
+  el("catalog-cleanup-batch-permanent").addEventListener("click",() => { void confirmCleanupBatch("permanent"); });
   function readJournal(){
     try{return normalizeExperimentEntries(JSON.parse(localStorage.getItem(experimentStorageKey)||"[]"));}
     catch{return [];}
@@ -289,6 +719,18 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       const promptChange=entry.prompt?.state==="different"
         ? ` · ${tc().onlyA}: ${(entry.prompt.onlyA||[]).join(", ")||tc().none} · ${tc().onlyB}: ${(entry.prompt.onlyB||[]).join(", ")||tc().none}`:"";
       prompt.textContent=`${tj().prompt}: ${tc()[entry.prompt?.state]||tc().unknown}${promptChange}`;
+      const negative=document.createElement("p");
+      const negativeChange=entry.negative?.state==="different"
+        ? ` · ${tc().onlyA}: ${(entry.negative.onlyA||[]).join(", ")||tc().none} · ${tc().onlyB}: ${(entry.negative.onlyB||[]).join(", ")||tc().none}`:"";
+      negative.textContent=`${tc().negative}: ${tc()[entry.negative?.state]||tc().unknown}${negativeChange}`;
+      const learning=document.createElement("p");
+      const changedKeys=entry.changed.map((row)=>row.key);
+      if(entry.prompt?.state==="different")changedKeys.push("prompt");
+      if(entry.negative?.state==="different")changedKeys.push("negative");
+      const description=learningDescription(entry.preferred==="A"||entry.preferred==="B"?entry.preferred:null,changedKeys,entry.learningConfidence);
+      learning.textContent=description.summary+(description.caution?" "+description.caution:"");
+      const nextTest=document.createElement("p");
+      nextTest.textContent=entry.nextTest?tl().journalNext+": "+entry.nextTest:"";
       const timing=document.createElement("p");
       timing.textContent=`${tj().minutes}: A ${entry.runMinutesA??"—"} · B ${entry.runMinutesB??"—"}`;
       const actions=document.createElement("div");actions.className="catalog-journal-entry-actions";
@@ -309,8 +751,32 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
         el("catalog-journal-status").textContent=writeJournal(remaining)?"":tj().failed;
         renderJournal();
       });
-      actions.append(reopen,remove);card.append(summary,files,winner,reason,changes,prompt,timing,actions);list.append(card);
+      actions.append(reopen,remove);card.append(summary,files,winner,reason,changes,prompt,negative,learning,nextTest,timing,actions);list.append(card);
     }
+  }
+  const fillLearning=(template,values)=>template.replace(/\{(winner|fields|base|other|field)\}/g,(_,key)=>String(values[key]??""));
+  function learningDescription(winner,changed,confidence){
+    if(!winner)return {summary:tl().choose,caution:""};
+    const fields=changed.map((key)=>tc()[key]||key).join(", ");
+    return {
+      summary:fields?fillLearning(tl().observed,{winner,fields}):winner+" — "+tl().none,
+      caution:confidence==="oneRecordedChange"?tl().one:confidence==="severalOrUnknown"?tl().many:""
+    };
+  }
+  function renderLearning(){
+    if(!selected.A||!selected.B)return;
+    const plan=planNextExperiment(selected.A,selected.B,el("catalog-experiment-preferred").value);
+    const description=learningDescription(plan.winner,plan.changed,plan.confidence);
+    el("catalog-learning-heading").textContent=tl().heading;
+    el("catalog-learning-summary").textContent=description.summary;
+    el("catalog-learning-caution").textContent=description.caution;
+    el("catalog-learning-next-label").textContent=tl().nextLabel;
+    const field=el("catalog-experiment-next-test");
+    field.setAttribute("aria-label",tl().nextLabel);
+    field.placeholder=plan.winner?tl().noSafe:tl().choose;
+    if(!learningNextManual)field.value=plan.next?fillLearning(tl().nextTemplate,{
+      base:plan.next.baseline,other:plan.next.alternative,field:tc()[plan.next.field]||plan.next.field
+    }):"";
   }
   function renderJournalForm(){
     for(const [id,key] of [["catalog-experiment-heading","journal"],["catalog-experiment-save","save"]])el(id).textContent=tj()[key];
@@ -320,6 +786,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     const select=el("catalog-experiment-preferred"),old=select.value;
     select.replaceChildren(...[["none","none"],["A","a"],["B","b"],["tie","tie"]].map(([value,key])=>new Option(tj()[key],value)));
     select.value=old||"none";select.setAttribute("aria-label",tj().preferred);
+    if(compareDialog.open)renderLearning();
   }
   const detailCache=new Map();
   const techFields=["width","height","duration","fps","frames","steps","cfg","seed","seeds","sampler","scheduler"];
@@ -383,6 +850,17 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     }
   }
   const posterCache = new Map(), posterJobs = new WeakMap(), posterQueue = [];
+  const cleanupPosterJobs=new WeakMap(), cleanupPosterQueue=[];
+  let cleanupPosterActive=0;
+  const cleanupPosterObserver=typeof IntersectionObserver==="function"
+    ? new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        cleanupPosterObserver.unobserve(entry.target);
+        const job=cleanupPosterJobs.get(entry.target);
+        if (job) { cleanupPosterQueue.push(job); pumpCleanupPosters(); }
+      }
+    },{root:el("catalog-cleanup-results"),rootMargin:"100px"}) : null;
   let posterActive = 0;
   let hoverTimer = null, hoverPreview = null;
   function stopHoverPreview() {
@@ -438,6 +916,28 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     });
   }
   function queuePoster(job) { posterQueue.push(job); pumpPosters(); }
+  function queueCleanupPoster(job) {
+    const cached=posterCache.get(posterKey(job.item));
+    if (cached) { job.image.src=cached; job.image.hidden=false; return; }
+    cleanupPosterJobs.set(job.button,job);
+    if (cleanupPosterObserver) cleanupPosterObserver.observe(job.button);
+    else queueMicrotask(() => { cleanupPosterQueue.push(job); pumpCleanupPosters(); });
+  }
+  function pumpCleanupPosters() {
+    while (cleanupPosterActive<2 && cleanupPosterQueue.length) {
+      const job=cleanupPosterQueue.shift();
+      if (!job.button.isConnected) continue;
+      cleanupPosterActive++;
+      extractPoster(job.item).then(image => {
+        if (!job.button.isConnected) return;
+        if (image) {
+          posterCache.set(posterKey(job.item),image);
+          if (posterCache.size>80) posterCache.delete(posterCache.keys().next().value);
+          job.image.src=image; job.image.hidden=false;
+        } else job.symbol.textContent=tv().noFrame+" · ▶";
+      }).finally(() => { cleanupPosterActive--; pumpCleanupPosters(); });
+    }
+  }
   function pumpPosters() {
     while (posterActive < 3 && posterQueue.length) {
       const job = posterQueue.shift();
@@ -490,16 +990,122 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     find("delete").disabled=viewerBusy;
   }
   function activeViewerDialog() { return imageDialog.open ? imageDialog : videoDialog.open ? videoDialog : null; }
+  function rememberViewerOrigin() {
+    if (viewerReturn || activeViewerDialog()) return;
+    viewerReturn = { page, resultsScrollTop:results.scrollTop, windowScrollY:window.scrollY };
+  }
+  async function restoreViewerOrigin() {
+    if (activeViewerDialog() || (!viewerReturn && !pendingCatalogRefresh)) return;
+    const origin=viewerReturn;
+    viewerReturn=null;
+    const needsSearch=pendingCatalogRefresh || (origin && page!==origin.page);
+    pendingCatalogRefresh=false;
+    if (origin) page=origin.page;
+    if (needsSearch) {
+      await search();
+      if (page>0 && page*24>=total) { page=Math.max(0,Math.ceil(total/24)-1); await search(); }
+    }
+    if (activeViewerDialog()) return;
+    requestAnimationFrame(() => {
+      if (activeViewerDialog()) return;
+      if (origin) {
+        results.scrollTop=origin.resultsScrollTop;
+        window.scrollTo({top:origin.windowScrollY,behavior:"auto"});
+      }
+    });
+  }
   function renderViewerPrompt(item,dialog) {
-    const labels=tr(), find=(name) => dialog.querySelector(`[data-viewer-${name}]`);
+    const labels=tr(), passportCopy=passportLabels(getLanguage());
+    const find=(name) => dialog.querySelector(`[data-viewer-${name}]`);
+    const panel=find("passport-panel");
+    if (panel.dataset.itemId !== String(item.id)) {
+      passportController?.abort(); passportController=null; passportRevision++;
+      panel.dataset.itemId=String(item.id); panel.hidden=true;
+    }
     find("positive-title").textContent=labels.positive;
     find("negative-title").textContent=labels.negative;
     find("positive").textContent=item.prompt || labels.unknown;
     find("negative").textContent=item._catalogDetailsReady ? item.negative || labels.unknown : labels.loading;
+    find("copy-positive").textContent=(viewerFieldCopy[getLanguage()] || viewerFieldCopy.EN).positive;
+    find("copy-negative").textContent=(viewerFieldCopy[getLanguage()] || viewerFieldCopy.EN).negative;
+    find("copy-positive").disabled=!item.prompt;
+    find("copy-negative").disabled=!item._catalogDetailsReady || !item.negative;
     find("copy-prompt").textContent=labels.copyPrompt;
     find("copy-recipe").textContent=labels.copyRecipe;
+    find("passport-open").textContent=passportCopy.open;
+    find("ask-ai").textContent=viewerAiCopy[getLanguage()] || viewerAiCopy.EN;
+    find("workbench").textContent=viewerWorkbenchCopy[getLanguage()] || viewerWorkbenchCopy.EN;
     find("copy-prompt").disabled=!item._catalogDetailsReady || !item.prompt;
     find("copy-recipe").disabled=!item._catalogDetailsReady;
+    find("passport-open").disabled=!item._catalogDetailsReady;
+    find("ask-ai").disabled=!item.prompt;
+    find("workbench").disabled=!item._catalogDetailsReady || !item.prompt;
+  }
+  function openViewerPassport(dialog) {
+    const item=viewerItem;
+    if (!item?._catalogDetailsReady || !dialog.open) return;
+    passportController?.abort(); passportController=null; passportRevision++;
+    const labels=passportLabels(getLanguage());
+    const passport=buildCreatorPassport(item,getLanguage());
+    const find=(name) => dialog.querySelector(`[data-viewer-passport-${name}]`);
+    find("review").textContent=labels.review;
+    find("missing").textContent=`${labels.missing}: ${passport.missing.length ? passport.missing.join(", ") : "—"}`;
+    find("warning").textContent=labels.sensitive;
+    find("warning").hidden=!passport.possibleSensitive;
+    find("text").value=passport.text;
+    find("text").setAttribute("aria-label",labels.open);
+    find("copy").textContent=labels.copy;
+    find("help").textContent=labels.help;
+    find("suggest").textContent=labels.suggest;
+    find("suggest").disabled=!String(item.prompt || "").trim();
+    find("suggest-status").textContent="";
+    find("suggested-text").value="";
+    find("suggested-text").hidden=true;
+    find("suggested-text").setAttribute("aria-label",labels.ready);
+    find("copy-suggestion").textContent=labels.copySuggestion;
+    find("copy-suggestion").hidden=true;
+    find("panel").hidden=false;
+    find("text").focus();
+  }
+  async function suggestViewerPassport(dialog) {
+    const item=viewerItem, labels=passportLabels(getLanguage());
+    if (!dialog.open || !item?._catalogDetailsReady) return;
+    const find=(name) => dialog.querySelector(`[data-viewer-passport-${name}]`);
+    const source=String(item.prompt || "").trim();
+    if (!source) return;
+    if (source.length>MAX_CORRECTION_INPUT) { find("suggest-status").textContent=labels.tooLong; return; }
+    passportController?.abort();
+    const controller=new AbortController(), revision=++passportRevision;
+    passportController=controller;
+    const current=() => dialog.open && viewerItem?.id===item.id && !controller.signal.aborted && revision===passportRevision;
+    const button=find("suggest"); button.disabled=true;
+    find("suggest-status").textContent=labels.working;
+    find("suggested-text").hidden=true; find("copy-suggestion").hidden=true;
+    const timeout=setTimeout(() => controller.abort(),180000);
+    try {
+      const tagsResponse=await fetch("/api/tags",{signal:controller.signal});
+      if (!tagsResponse.ok) throw new TypeError("Local Ollama unavailable");
+      const tags=await tagsResponse.json();
+      if (!current()) return;
+      const model=tags.models?.find((entry) => entry.name==="gemma3:4b" || entry.name==="gemma3:latest");
+      if (!model) { find("suggest-status").textContent=labels.modelMissing; return; }
+      const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,
+        body:JSON.stringify({model:model.name,stream:false,options:{temperature:0.25,num_predict:1800},messages:buildPromptCorrectionMessages(source)})});
+      if (!response.ok) throw new Error("Local correction failed");
+      const suggested=cleanPromptCorrectionResponse((await response.json()).message?.content);
+      if (!suggested) throw new Error("Empty local correction");
+      if (!current()) return;
+      find("suggested-text").value=suggested;
+      find("suggested-text").hidden=false;
+      find("copy-suggestion").hidden=false;
+      find("suggest-status").textContent=labels.ready;
+    } catch(error) {
+      if (dialog.open && viewerItem?.id===item.id && revision===passportRevision)
+        find("suggest-status").textContent=error instanceof TypeError ? labels.unavailable : labels.failed;
+    } finally {
+      clearTimeout(timeout);
+      if (revision===passportRevision) { passportController=null; if (dialog.open && viewerItem?.id===item.id) button.disabled=false; }
+    }
   }
   function showViewerTechnical(item,dialog) {
     const target=dialog.querySelector("[data-viewer-tech]");
@@ -526,6 +1132,20 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       await navigator.clipboard.writeText(value);
       if (dialog.open && viewerItem?.id===item.id)
         dialog.querySelector("[data-viewer-status]").textContent=kind === "recipe" ? tr().copiedRecipe : tr().copiedPrompt;
+    } catch {
+      if (dialog.open && viewerItem?.id===item.id)
+        dialog.querySelector("[data-viewer-status]").textContent=tr().copyFailed;
+    }
+  }
+  async function copyViewerField(dialog,kind) {
+    const item=viewerItem;
+    if (!item || !dialog.open) return;
+    const value=kind==="positive" ? item.prompt : item._catalogDetailsReady ? item.negative : "";
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      if (dialog.open && viewerItem?.id===item.id)
+        dialog.querySelector("[data-viewer-status]").textContent=(viewerFieldCopy[getLanguage()] || viewerFieldCopy.EN).copied;
     } catch {
       if (dialog.open && viewerItem?.id===item.id)
         dialog.querySelector("[data-viewer-status]").textContent=tr().copyFailed;
@@ -577,13 +1197,47 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     dialog.querySelector("[data-viewer-category]").addEventListener("change",(event) => { void saveViewerAnnotation({category:event.target.value}); });
     dialog.querySelector("[data-viewer-delete]").addEventListener("click",() => { if (viewerItem) void openDelete(viewerItem); });
     dialog.querySelector("[data-viewer-copy-prompt]").addEventListener("click",() => { void copyViewerContent(dialog,"prompt"); });
+    dialog.querySelector("[data-viewer-copy-positive]").addEventListener("click",() => { void copyViewerField(dialog,"positive"); });
+    dialog.querySelector("[data-viewer-copy-negative]").addEventListener("click",() => { void copyViewerField(dialog,"negative"); });
     dialog.querySelector("[data-viewer-copy-recipe]").addEventListener("click",() => { void copyViewerContent(dialog,"recipe"); });
+    dialog.querySelector("[data-viewer-passport-open]").addEventListener("click",() => openViewerPassport(dialog));
+    dialog.querySelector("[data-viewer-ask-ai]").addEventListener("click",() => {
+      if (!viewerItem?.prompt) return;
+      const text=String(viewerItem.prompt)+(viewerItem.negative ? "\n\nNegative prompt: "+viewerItem.negative : "");
+      document.dispatchEvent(new CustomEvent("prompt-studio-ask-ai",{detail:{text}}));
+    });
+    dialog.querySelector("[data-viewer-workbench]").addEventListener("click",() => {
+      if(!viewerItem?.prompt)return;
+      const event=new CustomEvent("prompt-studio-workbench-load",{cancelable:true,
+        detail:{prompt:String(viewerItem.prompt),negative:String(viewerItem.negative||"")}});
+      if(!document.dispatchEvent(event))return;
+      dialog.close();
+      document.getElementById("prompt-workbench")?.scrollIntoView({behavior:"smooth",block:"start"});
+    });
+    dialog.querySelector("[data-viewer-passport-suggest]").addEventListener("click",() => { void suggestViewerPassport(dialog); });
+    dialog.querySelector("[data-viewer-passport-copy-suggestion]").addEventListener("click",async () => {
+      const value=dialog.querySelector("[data-viewer-passport-suggested-text]").value.trim();
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        dialog.querySelector("[data-viewer-passport-suggest-status]").textContent=passportLabels(getLanguage()).copiedSuggestion;
+      } catch { dialog.querySelector("[data-viewer-passport-suggest-status]").textContent=tr().copyFailed; }
+    });
+    dialog.querySelector("[data-viewer-passport-copy]").addEventListener("click",async () => {
+      const value=dialog.querySelector("[data-viewer-passport-text]").value.trim();
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        dialog.querySelector("[data-viewer-status]").textContent=(passportUiCopy[getLanguage()] || passportUiCopy.EN).copied;
+      } catch { dialog.querySelector("[data-viewer-status]").textContent=tr().copyFailed; }
+    });
     dialog.addEventListener("keydown",(event) => {
       if (event.target.closest("video,select,input,textarea") || !["ArrowLeft","ArrowRight"].includes(event.key)) return;
       event.preventDefault(); void navigateViewer(event.key==="ArrowLeft" ? -1 : 1);
     });
   }
   function showVideo(item) {
+    rememberViewerOrigin();
     viewerItem=item; viewerIndex=Math.max(0,visibleItems.findIndex((entry) => entry.id===item.id));
     if (imageDialog.open) imageDialog.close();
     const player = el("catalog-video-player");
@@ -601,8 +1255,6 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     for (const side of ["A","B"]) el(`catalog-compare-slot-${side.toLowerCase()}`).textContent=`${side}: ${selected[side]?.filename || "—"}`;
     el("catalog-compare-open").disabled=compareBusy || !selected.A || !selected.B;
     el("catalog-compare-open").textContent=tc().open;
-    el("catalog-mixer-open").disabled=compareBusy || !selected.A || !selected.B;
-    el("catalog-mixer-open").textContent=tm().title;
     el("catalog-compare-clear").textContent=tc().clear;
     for (const button of results.querySelectorAll("[data-compare-side]"))
       button.setAttribute("aria-pressed",String(selected[button.dataset.compareSide]?.id === button.dataset.itemId));
@@ -623,24 +1275,6 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       ["catalog-compare-reveal","preview"],["catalog-compare-play","playBoth"],["catalog-compare-pause","pauseBoth"],
       ["catalog-compare-visual-run","runVisual"],["catalog-compare-disclaimer","disclaimer"]]) el(id).textContent=tc()[key];
     renderSelection();
-    renderMixerText();
-  }
-  function renderMixerText() {
-    for(const [id,key] of [["catalog-mixer-title","title"],["catalog-mixer-help","help"],["catalog-mixer-swap","swap"],
-      ["catalog-mixer-generate","generate"],["catalog-mixer-use","use"],["catalog-mixer-copy","copy"]])el(id).textContent=tm()[key];
-    const outputKind=el("catalog-mixer-kind"),old=outputKind.value||"image";
-    outputKind.replaceChildren(new Option(tm().image,"image"),new Option(tm().video,"video"));outputKind.value=old;
-    el("catalog-mixer-output").setAttribute("aria-label",tm().title);
-    el("catalog-mixer-generate").disabled=!selected.A?.prompt||!selected.B?.prompt;
-    const ready=Boolean(el("catalog-mixer-output").value.trim());
-    el("catalog-mixer-use").disabled=!ready;el("catalog-mixer-copy").disabled=!ready;
-  }
-  function generateMix() {
-    const result=mixArchivedPrompts(selected.A,selected.B,{swap:mixerSwapped,kind:el("catalog-mixer-kind").value});
-    if(!result){el("catalog-mixer-status").textContent=tm().needPrompts;return;}
-    el("catalog-mixer-output").value=result.prompt;
-    el("catalog-mixer-sources").textContent=`${tm().scene}: ${result.sceneFilename} · ${tm().look}: ${result.lookFilename}`;
-    el("catalog-mixer-status").textContent="";renderMixerText();
   }
   function clearCompareMedia() {
     for (const side of ["a","b"]) {
@@ -680,38 +1314,46 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       }
       body.append(tr);
     }
-    const promptRow=document.createElement("tr"); promptRow.dataset.state=data.prompt.state;
-    for (const value of [tc().prompt,data.prompt.state === "unknown" ? tc().unknown : data.prompt.state === "same" ? tc().same : tc().different,
-      data.prompt.state === "different" ? `${tc().onlyA}: ${data.prompt.onlyA.join(", ") || tc().none} · ${tc().onlyB}: ${data.prompt.onlyB.join(", ") || tc().none}` : "—"]) {
-      const cell=document.createElement("td"); cell.textContent=value; promptRow.append(cell);
+    for(const key of ["prompt","negative"]){
+      const detail=data[key],row=document.createElement("tr");row.dataset.state=detail.state;
+      for(const value of [tc()[key],detail.state==="unknown"?tc().unknown:detail.state==="same"?tc().same:tc().different,
+        detail.state==="different"?`${tc().onlyA}: ${detail.onlyA.join(", ")||tc().none} · ${tc().onlyB}: ${detail.onlyB.join(", ")||tc().none}`:"—"]){
+        const cell=document.createElement("td");cell.textContent=value;row.append(cell);
+      }
+      body.append(row);
     }
-    body.append(promptRow); table.append(body); facts.replaceChildren(table);
+    table.append(body);facts.replaceChildren(table);
     el("catalog-compare-tradeoffs").replaceChildren(...data.notes.map((note) => {
       const li=document.createElement("li"); li.textContent=(tc()[note.key] || "").replace("{side}",note.side || ""); return li;
     }));
   }
-  async function openCompare(focusMixer=false) {
+  async function openCompare() {
     if (!selected.A || !selected.B || compareBusy) return;
     compareBusy=true; renderSelection(); el("catalog-progress").textContent=tc().checking;
     const pair=[selected.A,selected.B], revision=++compareRevision;
     try {
       const responses=await Promise.all(pair.map((item) => api(`/api/catalog/settings?id=${encodeURIComponent(item.id)}`)));
       if (revision !== compareRevision || selected.A?.id !== pair[0].id || selected.B?.id !== pair[1].id) return;
-      for (const [index,detail] of responses.entries()) { pair[index].settings=detail.settings || {}; pair[index].model=detail.model || pair[index].model; }
+      for (const [index,detail] of responses.entries()) {
+        pair[index].settings=detail.settings || {};
+        pair[index].model=detail.model || pair[index].model;
+        pair[index].prompt=detail.prompt || pair[index].prompt;
+        pair[index].negative=detail.negative || "";
+      }
       compareVisible=el("catalog-show-thumbnails").checked;
       fillCompareText(); renderCompareMedia(); renderCompareFacts();
       el("catalog-experiment-title").value="";
       el("catalog-experiment-preferred").value="none";
       el("catalog-experiment-reason").value="";
+      el("catalog-experiment-next-test").value="";
+      learningNextManual=false;
+      renderLearning();
       el("catalog-experiment-time-a").value="";
       el("catalog-experiment-time-b").value="";
       el("catalog-experiment-status").textContent="";
       el("catalog-experiment-save").disabled=false;
       el("catalog-compare-visual-status").textContent=""; el("catalog-compare-visual-result").replaceChildren();
-      mixerSwapped=false;el("catalog-mixer-kind").value=selected.A.kind==="video"?"video":"image";
-      el("catalog-mixer-output").value="";el("catalog-mixer-sources").textContent="";el("catalog-mixer-status").textContent="";renderMixerText();
       el("catalog-progress").textContent=""; compareDialog.showModal();
-      if(focusMixer)requestAnimationFrame(()=>el("catalog-idea-mixer").scrollIntoView({behavior:"smooth",block:"start"}));
     } catch { if (revision === compareRevision) el("catalog-progress").textContent=tc().dataFailed; }
     finally { compareBusy=false; renderSelection(); }
   }
@@ -804,13 +1446,23 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   function translate() {
     for (const [id,key] of [["catalog-title","title"],["catalog-intro","intro"],["catalog-add-root","add"],["catalog-scan","scan"],["catalog-prev","prev"],["catalog-next","next"],["catalog-add-category","addCategory"]]) el(id).textContent = t()[key];
     el("catalog-intro").textContent = td().intro;
+    if (cleanupBatchDialog.open) renderCleanupBatchDialog();
     for (const [id,key] of [["catalog-delete-title","title"],["catalog-delete-explanation","explanation"],["catalog-delete-ack-label","acknowledge"],["catalog-delete-cancel","cancel"],["catalog-delete-trash","trash"],["catalog-delete-permanent","permanent"]]) el(id).textContent = td()[key];
     el("catalog-image-close").textContent = ti().close;
     el("catalog-image-open").textContent = ti().open;
     el("catalog-video-close").textContent = tv().close;
     el("catalog-video-hint").textContent = tv().hint;
     el("catalog-show-thumbnails-label").textContent = tp().show;
+    el("catalog-auto-scan-label").textContent=catalogAutoScanCopy[getLanguage()] || catalogAutoScanCopy.EN;
     el("catalog-root-input").placeholder = t().root; query.placeholder = t().search;
+    el("catalog-date-heading").textContent=t().heading;
+    el("catalog-date-from-label").textContent=t().from;
+    el("catalog-date-to-label").textContent=t().to;
+    const oldDatePreset=datePreset.value;
+    datePreset.replaceChildren(new Option(t().allDates,"all"),new Option(t().today,"today"),new Option(t().last7,"last7"),new Option(t().last30,"last30"),new Option(t().custom,"custom"));
+    datePreset.value=oldDatePreset || "all";
+    datePreset.setAttribute("aria-label",t().heading);
+    renderGalleryState();
     el("catalog-new-category").placeholder = t().newCategory;
     el("catalog-new-category").setAttribute("aria-label",t().newCategory);
     const oldKind = kind.value, oldRoot = root.value, oldPrompt = promptFilter.value, oldCategory = categoryFilter.value, oldRating = ratingFilter.value;
@@ -826,6 +1478,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     ratingFilter.setAttribute("aria-label",t().rate);
     fillCompareText();
     renderJournalForm();renderJournal();
+    renderCleanup();
     if (compareDialog.open) { renderCompareMedia(); renderCompareFacts(); }
     const dialog=activeViewerDialog(); if (dialog) renderViewerToolbar(dialog);
     renderStatus(); search();
@@ -847,6 +1500,56 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   async function refreshStatus() {
     try { status = await api("/api/catalog/status"); renderStatus(); }
     catch { status = null; renderStatus(); }
+  }
+  async function refreshVisibleResults() {
+    if (document.hidden || activeViewerDialog()) { pendingCatalogRefresh=true; return; }
+    const viewKey=() => JSON.stringify([page,galleryMode,query.value,kind.value,root.value,promptFilter.value,
+      categoryFilter.value,ratingFilter.value,dateFrom.value,dateTo.value]);
+    let expectedView=viewKey();
+    const previousScroll=results.scrollTop, previousWindowScroll=window.scrollY;
+    await search();
+    if (viewKey()!==expectedView) return;
+    if (page>0 && page*24>=total) {
+      page=Math.max(0,Math.ceil(total/24)-1);
+      expectedView=viewKey();
+      await search();
+    }
+    if (activeViewerDialog()) { pendingCatalogRefresh=true; return; }
+    requestAnimationFrame(() => {
+      if (activeViewerDialog() || viewKey()!==expectedView) return;
+      results.scrollTop=previousScroll;
+      window.scrollTo({top:previousWindowScroll,behavior:"auto"});
+    });
+  }
+  function monitorCatalogScan() {
+    if (scanMonitorActive) return;
+    scanMonitorActive=true;
+    const poll=async () => {
+      await refreshStatus();
+      if (!status) { scanMonitorActive=false; timer=null; return; }
+      if (status.scan?.running) { timer=setTimeout(poll,2000); return; }
+      scanMonitorActive=false; timer=null;
+      nextAutoScanAt=Date.now()+autoScanIntervalMs;
+      await refreshVisibleResults();
+    };
+    timer=setTimeout(poll,2000);
+  }
+  async function beginCatalogScan(automatic=false) {
+    if (scanRequestPending || scanMonitorActive || !status) return;
+    if (automatic && (!autoScanToggle.checked || document.hidden || !status.roots?.length)) return;
+    if (status.scan?.running) { monitorCatalogScan(); return; }
+    scanRequestPending=true;
+    try {
+      const response=await api("/api/catalog/scan",{method:"POST"});
+      await refreshStatus();
+      if (response.started || status?.scan?.running) {
+        nextAutoScanAt=Date.now()+autoScanIntervalMs;
+        monitorCatalogScan();
+      } else if (automatic) nextAutoScanAt=Date.now()+60000;
+    } catch {
+      if (!automatic) el("catalog-progress").textContent=t().offline;
+      nextAutoScanAt=Date.now()+60000;
+    } finally { scanRequestPending=false; }
   }
   function resultRow(item) {
     const row = document.createElement("article"); row.className = "catalog-item"; row.dataset.catalogId=item.id;
@@ -973,7 +1676,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     load.addEventListener("click", () => {
       const current=getCurrent();
       if (current.prompt?.trim() && current.prompt.trim() !== item.prompt.trim() && !confirm(t().confirm)) return;
-      restore({ mode:item.kind === "image" ? "image" : "video", prompt:item.prompt, negative:item.negative||"", language:"EN", model:item.model });
+      restore({ mode:item.kind === "image" ? "image" : "video", prompt:item.prompt, language:"EN", model:item.model });
       el("catalog-progress").textContent=t().loaded;
       document.getElementById("classic-result")?.scrollIntoView({behavior:"smooth",block:"start"});
     });
@@ -1039,6 +1742,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     } finally { deletePreparing=false; }
   }
   function showImage(item) {
+    rememberViewerOrigin();
     viewerItem=item; previewItem=item; viewerIndex=Math.max(0,visibleItems.findIndex((entry) => entry.id===item.id));
     if (videoDialog.open) videoDialog.close();
     el("catalog-image-title").textContent=item.filename;
@@ -1050,38 +1754,27 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     showViewerTechnical(item,imageDialog);
   }
   el("catalog-image-close").addEventListener("click",() => imageDialog.close());
-  imageDialog.addEventListener("close",() => { previewItem=null; el("catalog-image-large").removeAttribute("src"); if (!videoDialog.open) viewerItem=null; });
+  imageDialog.addEventListener("close",() => { passportController?.abort(); passportRevision++; previewItem=null; el("catalog-image-large").removeAttribute("src"); if (!videoDialog.open) viewerItem=null; void restoreViewerOrigin(); });
   el("catalog-video-close").addEventListener("click",() => videoDialog.close());
   videoDialog.addEventListener("close",() => {
+    passportController?.abort(); passportRevision++;
     const player = el("catalog-video-player");
     player.pause(); player.removeAttribute("src"); player.removeAttribute("poster"); player.load();
     if (!imageDialog.open) viewerItem=null;
+    void restoreViewerOrigin();
   });
   el("catalog-compare-open").addEventListener("click",() => { void openCompare(); });
-  el("catalog-mixer-open").addEventListener("click",() => { void openCompare(true); });
   el("catalog-compare-clear").addEventListener("click",() => { selected.A=null; selected.B=null; renderSelection(); });
-  el("catalog-mixer-generate").addEventListener("click",generateMix);
-  el("catalog-mixer-swap").addEventListener("click",()=>{mixerSwapped=!mixerSwapped;generateMix();});
-  el("catalog-mixer-output").addEventListener("input",renderMixerText);
-  el("catalog-mixer-use").addEventListener("click",()=>{
-    const prompt=el("catalog-mixer-output").value.trim();if(!prompt)return;
-    if(getCurrent()?.prompt?.trim()&&!window.confirm(tm().confirm))return;
-    const outputKind=el("catalog-mixer-kind").value;
-    compareDialog.close();restore({mode:outputKind,prompt,language:"EN",model:""});
-    el("catalog-progress").textContent=tm().used;
-    document.querySelector(".result-column")?.scrollIntoView({behavior:"smooth",block:"start"});
-  });
-  el("catalog-mixer-copy").addEventListener("click",async()=>{
-    try{await navigator.clipboard.writeText(el("catalog-mixer-output").value);el("catalog-mixer-status").textContent=tm().copied;}
-    catch{el("catalog-mixer-status").textContent=tm().copyError;}
-  });
+  el("catalog-experiment-preferred").addEventListener("change",()=>{learningNextManual=false;renderLearning();});
+  el("catalog-experiment-next-test").addEventListener("input",()=>{learningNextManual=true;});
   el("catalog-experiment-save").addEventListener("click",()=>{
     if(!selected.A||!selected.B||!compareDialog.open)return;
     const saveButton=el("catalog-experiment-save");if(saveButton.disabled)return;
     saveButton.disabled=true;
     const entry=createExperimentEntry(selected.A,selected.B,{
       title:el("catalog-experiment-title").value,preferred:el("catalog-experiment-preferred").value,
-      reason:el("catalog-experiment-reason").value,runMinutesA:el("catalog-experiment-time-a").value,
+      reason:el("catalog-experiment-reason").value,nextTest:el("catalog-experiment-next-test").value,
+      runMinutesA:el("catalog-experiment-time-a").value,
       runMinutesB:el("catalog-experiment-time-b").value
     });
     const current=readJournal();
@@ -1146,25 +1839,37 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   });
   document.addEventListener("visibilitychange",() => { if (document.hidden) stopHoverPreview(); });
   async function search() {
+    const revision=++searchRevision;
     stopHoverPreview();
     detailObserver?.disconnect(); detailQueue.length=0;
     posterObserver?.disconnect(); posterQueue.length = 0;
     if (!status) { visibleItems=[]; results.replaceChildren(); return; }
     const params = new URLSearchParams({ q:query.value, kind:kind.value, root:root.value, prompt:promptFilter.value,
-      category:categoryFilter.value, rating:ratingFilter.value, page:String(page) });
+      category:categoryFilter.value, rating:ratingFilter.value, from:dateFrom.value, to:dateTo.value, page:String(page) });
     try {
-      const data=await api(`/api/catalog/search?${params}`); total=data.total; visibleItems=data.results;
+      const data=await api(`/api/catalog/search?${params}`);
+      if (revision!==searchRevision) return;
+      total=data.total; visibleItems=data.results;
       results.replaceChildren(...data.results.map(resultRow));
       renderSelection(); renderMarked();
       if (!data.results.length) { const message=document.createElement("p"); message.textContent=t().empty; results.append(message); }
       el("catalog-count").textContent=`${total} ${t().result}`;
-      el("catalog-page").textContent=`${t().page} ${page+1} / ${Math.max(1,Math.ceil(total/24))}`;
-      el("catalog-prev").disabled=page===0; el("catalog-next").disabled=(page+1)*24>=total;
-    } catch { visibleItems=[]; results.replaceChildren(); }
+      const pageLabel=`${t().page} ${page+1} / ${Math.max(1,Math.ceil(total/24))}`;
+      for (const suffix of ["","-top"]) {
+        el(`catalog-page${suffix}`).textContent=pageLabel;
+        el(`catalog-prev${suffix}`).disabled=page===0; el(`catalog-next${suffix}`).disabled=(page+1)*24>=total;
+        el(`catalog-first${suffix}`).disabled=page===0; el(`catalog-last${suffix}`).disabled=(page+1)*24>=total;
+      }
+    } catch { if (revision===searchRevision) { visibleItems=[]; results.replaceChildren(); } }
   }
   el("catalog-add-root").addEventListener("click", async () => {
     const input=el("catalog-root-input"), value=input.value.trim(); if (!value) return;
-    try { status=await api("/api/catalog/roots",{ method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:value}) }); input.value=""; translate(); el("catalog-progress").textContent=t().newRoot; }
+    try {
+      status=await api("/api/catalog/roots",{ method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:value}) });
+      input.value=""; translate();
+      if (autoScanToggle.checked) void beginCatalogScan(true);
+      else el("catalog-progress").textContent=t().newRoot;
+    }
     catch (error) { el("catalog-progress").textContent=`${t().badRoot} ${error.message}`; }
   });
   async function addCategory() {
@@ -1178,17 +1883,98 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   }
   el("catalog-add-category").addEventListener("click",addCategory);
   el("catalog-new-category").addEventListener("keydown",(event) => { if (event.key === "Enter") { event.preventDefault(); addCategory(); } });
-  el("catalog-scan").addEventListener("click", async () => {
-    try {
-      await api("/api/catalog/scan",{method:"POST"}); await refreshStatus();
-      clearInterval(timer);
-      timer=setInterval(async () => { await refreshStatus(); if (!status?.scan?.running) { clearInterval(timer); timer=null; page=0; search(); } },1000);
-    } catch { el("catalog-progress").textContent=t().offline; }
+  el("catalog-scan").addEventListener("click",() => { void beginCatalogScan(); });
+  autoScanToggle.addEventListener("change",() => {
+    try { localStorage.setItem(autoScanStorageKey,String(autoScanToggle.checked)); } catch { /* Keep this page's choice. */ }
+    if (autoScanToggle.checked) void beginCatalogScan(true);
+  });
+  async function autoScanTick() {
+    if (!autoScanToggle.checked || document.hidden || Date.now()<nextAutoScanAt || scanRequestPending || scanMonitorActive) return;
+    if (!status) await refreshStatus();
+    if (!status?.roots?.length) { nextAutoScanAt=Date.now()+autoScanIntervalMs; return; }
+    await beginCatalogScan(true);
+  }
+  setInterval(() => { void autoScanTick(); },60000);
+  document.addEventListener("visibilitychange",() => {
+    if (document.hidden) return;
+    if (pendingCatalogRefresh && !activeViewerDialog()) { pendingCatalogRefresh=false; void refreshVisibleResults(); }
+    void autoScanTick();
   });
   query.addEventListener("input", () => { clearTimeout(delay); delay=setTimeout(() => { page=0; search(); },250); });
   for (const input of [kind,root,promptFilter,categoryFilter,ratingFilter]) input.addEventListener("change",() => { page=0; search(); });
-  el("catalog-prev").addEventListener("click",() => { if (page>0) { page--; search(); } });
-  el("catalog-next").addEventListener("click",() => { if ((page+1)*24<total) { page++; search(); } });
+  const dateString=(date) => [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");
+  function renderGalleryState() {
+    galleryToggle.textContent=galleryMode?t().listView:t().galleryView;
+    galleryControls.hidden=!galleryMode;
+    el("catalog-gallery-day-label").textContent=t().day;
+    el("catalog-gallery-prev-day").textContent=t().previousDay;
+    el("catalog-gallery-next-day").textContent=t().nextDay;
+    el("catalog-gallery-hint").textContent=t().galleryHint;
+    for (const suffix of ["","-top"]) {
+      el(`catalog-first${suffix}`).textContent=t().firstPage;
+      el(`catalog-last${suffix}`).textContent=t().lastPage;
+      el(`catalog-prev${suffix}`).textContent=t().prev;
+      el(`catalog-next${suffix}`).textContent=t().next;
+    }
+    galleryDay.setAttribute("aria-label",t().day);
+    results.classList.toggle("catalog-gallery-mode",galleryMode);
+    for (const input of [datePreset,dateFrom,dateTo]) input.disabled=galleryMode;
+    for (const suffix of ["","-top"]) {
+      el(`catalog-pager${suffix}`).classList.add("catalog-pager-gallery");
+      el(`catalog-first${suffix}`).hidden=false; el(`catalog-last${suffix}`).hidden=false;
+    }
+    results.after(el("catalog-pager"));
+  }
+  function selectGalleryDay(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+    galleryDay.value=value; dateFrom.value=value; dateTo.value=value; datePreset.value="custom";
+    page=0; search();
+  }
+  galleryToggle.addEventListener("click",async () => {
+    if (galleryMode) {
+      galleryMode=false;
+      dateFrom.value=savedDateFilter?.from || ""; dateTo.value=savedDateFilter?.to || "";
+      datePreset.value=savedDateFilter?.preset || "all"; savedDateFilter=null;
+      renderGalleryState(); page=0; search(); return;
+    }
+    galleryToggle.disabled=true;
+    try {
+      let day=dateTo.value || dateFrom.value;
+      if (!day) {
+        const latest=await api("/api/catalog/search?limit=1");
+        const modified=latest.results?.[0]?.modified;
+        if (modified && !Number.isNaN(Date.parse(modified))) day=dateString(new Date(modified));
+      }
+      savedDateFilter={from:dateFrom.value,to:dateTo.value,preset:datePreset.value};
+      galleryMode=true; renderGalleryState(); selectGalleryDay(day || dateString(new Date()));
+    } catch (error) { el("catalog-progress").textContent=String(error.message || error); }
+    finally { galleryToggle.disabled=false; }
+  });
+  galleryDay.addEventListener("change",() => selectGalleryDay(galleryDay.value));
+  for (const [id,step] of [["catalog-gallery-prev-day",-1],["catalog-gallery-next-day",1]]) {
+    el(id).addEventListener("click",() => {
+      const day=new Date((galleryDay.value || dateString(new Date()))+"T12:00:00");
+      day.setDate(day.getDate()+step); selectGalleryDay(dateString(day));
+    });
+  }
+  datePreset.addEventListener("change",() => {
+    const today=new Date(); today.setHours(0,0,0,0);
+    if (datePreset.value==="all") { dateFrom.value=""; dateTo.value=""; }
+    else if (datePreset.value!=="custom") {
+      const start=new Date(today);
+      if (datePreset.value==="last7") start.setDate(start.getDate()-6);
+      if (datePreset.value==="last30") start.setDate(start.getDate()-29);
+      dateFrom.value=dateString(start); dateTo.value=dateString(today);
+    }
+    page=0; search();
+  });
+  for (const input of [dateFrom,dateTo]) input.addEventListener("change",() => { datePreset.value="custom"; page=0; search(); });
+  for (const suffix of ["","-top"]) {
+    el(`catalog-first${suffix}`).addEventListener("click",() => { if (page>0) { page=0; search(); } });
+    el(`catalog-prev${suffix}`).addEventListener("click",() => { if (page>0) { page--; search(); } });
+    el(`catalog-next${suffix}`).addEventListener("click",() => { if ((page+1)*24<total) { page++; search(); } });
+    el(`catalog-last${suffix}`).addEventListener("click",() => { const last=Math.max(0,Math.ceil(total/24)-1); if (page<last) { page=last; search(); } });
+  }
   el("catalog-delete-ack").addEventListener("change",() => { el("catalog-delete-permanent").disabled=!el("catalog-delete-ack").checked || deleteBusy; });
   el("catalog-delete-cancel").addEventListener("click",() => { if (!deleteBusy) deleteDialog.close(); });
   deleteDialog.addEventListener("close",() => { deletionPlan=null; });
@@ -1204,10 +1990,12 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       deleteDialog.close();
       for (const side of ["A","B"]) if (selected[side]?.id === deletedId) selected[side]=null;
       marked.delete(deletedId);
+      cleanupSelected.delete(deletedId);
       if (viewerItem?.id===deletedId) { if (imageDialog.open) imageDialog.close(); if (videoDialog.open) videoDialog.close(); viewerItem=null; }
       await refreshStatus();
       if (page>0 && page*24>=total-1) page--;
       await search();
+      await refreshCleanup();
       el("catalog-progress").textContent=`${mode === "trash" ? td().doneTrash : td().donePermanent}${result.warning ? ` ${td().warning} ${result.warning}` : ""}`;
     } catch (error) { el("catalog-delete-error").textContent=`${td().error} ${error.message}`; }
     finally {
@@ -1219,7 +2007,12 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   el("catalog-delete-trash").addEventListener("click",() => confirmDeletion("trash"));
   el("catalog-delete-permanent").addEventListener("click",() => confirmDeletion("permanent"));
   document.getElementById("ui-language")?.addEventListener("change",translate);
-  refreshStatus().then(translate);
+  refreshStatus().then(() => {
+    translate();
+    if (status?.scan?.running) monitorCatalogScan();
+    else if (autoScanToggle.checked && status?.roots?.length) void beginCatalogScan(true);
+  });
+  void refreshCleanup();
 }
 
 const creativeMemoryCopy = {

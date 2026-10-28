@@ -22,7 +22,7 @@ const languageNames = { HU:"Hungarian", EN:"English", DE:"German", FR:"French", 
 const bilingualPromptLabels = { EN:"Editable multilingual image-edit prompt", HU:"Szerkeszthető többnyelvű képprompt", DE:"Bearbeitbarer mehrsprachiger Bildprompt", FR:"Prompt image multilingue modifiable", ES:"Prompt de imagen multilingüe editable", IT:"Prompt immagine multilingue modificabile", PT:"Prompt de imagem multilingue editável", PL:"Edytowalny wielojęzyczny prompt obrazu" };
 const el = (id) => document.getElementById(id);
 
-export function attachImageToImage({ getImage, imageBase64, getLanguage, getNegative, onPromptReady, onImageChange }) {
+export function attachImageToImage({ getImage, imageBase64, getLanguage }) {
   const model = el("i2i-model"), priority = el("i2i-priority"), customModel = el("i2i-custom-model");
   const keep = el("i2i-keep"), change = el("i2i-change"), prompt = el("i2i-prompt");
   const promptEditor = attachBilingualPromptEditor({ field:prompt, getLanguage });
@@ -97,7 +97,6 @@ export function attachImageToImage({ getImage, imageBase64, getLanguage, getNega
       dimensions = null;
       aiWarnings = [];
       promptEditor.clear();
-      onImageChange?.();
       el("i2i-options").replaceChildren();
       el("i2i-suggestions").hidden = true;
       status.textContent = file ? t().ready : t().chooseImage;
@@ -119,7 +118,6 @@ export function attachImageToImage({ getImage, imageBase64, getLanguage, getNega
         button.classList.add("selected");
         const body = visualPlan ? `${suggestion.prompt}\nVisual direction: ${visualPlan}.` : suggestion.prompt;
         promptEditor.setPrompt(opening ? `${opening}.\n${body}` : body, "EN");
-        onPromptReady?.();
       });
       target.appendChild(button);
     }
@@ -186,8 +184,7 @@ export function attachImageToImage({ getImage, imageBase64, getLanguage, getNega
     const label = model.value === "other" ? (customModel.value.trim() || imageEditProfiles.other.label) : imageEditProfiles[model.value].label;
     const note = `Model/workflow: ${label}\nSuggested or chosen resolution: ${width.value} × ${height.value}\nReference image: ${getImage()?.name || ""}\nPrompt language: ${promptEditor.getLanguage()}\n\n`;
     const link = document.createElement("a");
-    const negative = getNegative?.().trim() || "";
-    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + (negative ? `\n\nNegative prompt:\n${negative}` : "") + "\n"], { type:"text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + "\n"], { type:"text/plain;charset=utf-8" }));
     link.href = url; link.download = "ArtofTomworks_image_to_image_prompt.txt";
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

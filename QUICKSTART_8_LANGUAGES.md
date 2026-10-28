@@ -1,4 +1,8 @@
-# Prompt Studio 1.19 — Quick start in 8 languages
+# Quickstart — 8 languages
+
+Version 1.20.0: see README.md / README_HU.md for the complete current guide, automatic refresh, model selection and cleanup. Ollama is optional; image assistance requires a compatible vision model. Some older translation tools still use gemma3:4b. Run GPU generation and local image analysis sequentially. See LOCAL_AI_GUIDE.md.
+
+# Prompt Studio 1.20.0 — Quick start in 8 languages
 
 The new **Director's timeline** is available in all eight interface languages. Plan action, camera and sound in time segments; copy the editable prompt, then enter the displayed FPS and frame count manually in SwarmUI or ComfyUI. Link an archived video and export plans to JSON for backup. The optional **Prompt writing guide** below the mode selector offers typing suggestions, an editable structure, a step-by-step walkthrough, and a local prompt checker. / Az új **Rendezői idővonal** mind a nyolc felületi nyelven elérhető. Tervezd meg időszakaszonként a cselekményt, kamerát és hangot; az FPS-t és képkockaszámot kézzel állítsd be. Archív videót kapcsolhatsz hozzá, a terveket JSON-ba mentheted. A módválasztó alatti **Promptírási szamárvezető** gépelési javaslatot, szerkeszthető vázlatot, lépésenkénti segítséget és helyi promptellenőrt ad.
 

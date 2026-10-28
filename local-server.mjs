@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
+import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { extname } from "node:path";
+import { extname, isAbsolute } from "node:path";
+import { launchInstalledCopilot } from "./copilot-launch.mjs";
 import { loadAddonLibrary, addonStatus, addonItems, addAddonRoot, scanAddonLibrary } from "./addon-library.mjs";
-import { loadMediaCatalog, catalogStatus, addCatalogRoot, addCatalogCategory, setCatalogAnnotation, startCatalogScan, searchCatalog, searchCreativeMemory, catalogGlossaryCandidates, catalogSentenceCandidates, catalogItem, catalogSettings, catalogHandoff, openCatalogImage, previewCatalogDeletion, deleteCatalogItem } from "./media-catalog.mjs";
+import { loadMediaCatalog, catalogStatus, addCatalogRoot, addCatalogCategory, setCatalogAnnotation, startCatalogScan, searchCatalog, searchCreativeMemory, catalogGlossaryCandidates, catalogSentenceCandidates, catalogItem, catalogSettings, catalogHandoff, openCatalogImage, previewCatalogDeletion, deleteCatalogItem, catalogCleanupStatus, catalogCleanupResults, catalogCleanupAutoSelection, previewCatalogCleanupBatch, deleteCatalogCleanupBatch, startCatalogCleanup, cancelCatalogCleanup } from "./media-catalog.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PROMPT_STUDIO_PORT || 18819);
@@ -60,7 +62,43 @@ export const server = createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && req.url === "/health") {
-      send(res, 200, JSON.stringify({ ready:true, mediaDeletion:true, mediaFavorites:true, imagePreview:true, videoThumbnails:true, abCompare:true, directorTimeline:true, archiveHandoff:true, recipeCopy:true, glossarySuggestions:true, addonAdvisor:true, globalClean:true, version:"1.19" }));
+      send(res, 200, JSON.stringify({ ready:true, mediaDeletion:true, mediaFavorites:true, imagePreview:true, videoThumbnails:true, abCompare:true, directorTimeline:true, archiveHandoff:true, recipeCopy:true, glossarySuggestions:true, addonAdvisor:true, cleanupAdvisor:true, cleanupBatch:true, globalClean:true, version:"1.20.0" }));
+      return;
+    }
+    if (req.method === "POST" && requestUrl.pathname === "/api/ai/launch-copilot") {
+      if (req.headers.origin !== origin || req.headers["x-prompt-studio-action"] !== "launch-copilot" ||
+          !req.headers["content-type"]?.startsWith("application/json")) {
+        send(res, 403, JSON.stringify({ error:"Local Prompt Studio only" })); return;
+      }
+      try {
+        if ((await readBody(req)).length > 2) throw new Error("Unexpected request body");
+        send(res, 200, JSON.stringify(await launchInstalledCopilot()));
+      } catch (cause) {
+        send(res, 409, JSON.stringify({ error:String(cause?.message || cause).slice(0,200) }));
+      }
+      return;
+    }
+    if (req.method === "POST" && requestUrl.pathname === "/api/tools/launch") {
+      if (req.headers.origin !== origin || req.headers["x-prompt-studio-action"] !== "launch-local-tool" ||
+          !req.headers["content-type"]?.startsWith("application/json")) {
+        send(res, 403, JSON.stringify({ error:"Local Prompt Studio only" })); return;
+      }
+      try {
+        const body=await readBody(req);
+        if(body.length>4096)throw Error("Request too large");
+        const input=JSON.parse(body.toString("utf8"));
+        const target=String(input?.path||"").trim().replace(/^"|"$/g,"");
+        if(process.platform!=="win32" || target.startsWith("\\\\") || !isAbsolute(target) ||
+            extname(target).toLowerCase()!==".exe" || /[\r\n|<>]/.test(target))
+          throw Error("Choose an absolute local .exe file");
+        if(!(await stat(target)).isFile())throw Error("Program file not found");
+        const child=spawn(target,[],{detached:true,stdio:"ignore",windowsHide:true});
+        await new Promise((resolve,reject)=>{child.once("spawn",resolve);child.once("error",reject);});
+        child.unref();
+        send(res,200,JSON.stringify({ launched:true }));
+      } catch(cause) {
+        send(res,400,JSON.stringify({ error:String(cause?.message||cause).slice(0,200) }));
+      }
       return;
     }
     if (req.method === "GET" && requestUrl.pathname === "/api/addons/status") {
@@ -84,11 +122,47 @@ export const server = createServer(async (req, res) => {
     if (req.method === "GET" && requestUrl.pathname === "/api/catalog/status") {
       send(res, 200, JSON.stringify(catalogStatus())); return;
     }
+    if (req.method === "GET" && requestUrl.pathname === "/api/catalog/cleanup/status") {
+      send(res, 200, JSON.stringify(catalogCleanupStatus())); return;
+    }
+    if (req.method === "GET" && requestUrl.pathname === "/api/catalog/cleanup/results") {
+      send(res, 200, JSON.stringify(catalogCleanupResults(requestUrl.searchParams.get("page") || "0"))); return;
+    }
+    if (req.method === "GET" && requestUrl.pathname === "/api/catalog/cleanup/auto-selection") {
+      try { send(res, 200, JSON.stringify(catalogCleanupAutoSelection(requestUrl.searchParams.get("keep") || "rating"))); }
+      catch (cause) { send(res, 409, JSON.stringify({ error:String(cause?.message || cause).slice(0,200) })); }
+      return;
+    }
+    if (req.method === "POST" && ["/api/catalog/cleanup/batch-preview", "/api/catalog/cleanup/batch-delete"].includes(requestUrl.pathname)) {
+      const preview=requestUrl.pathname.endsWith("preview");
+      if (req.headers.origin !== origin ||
+          req.headers["x-prompt-studio-action"] !== (preview ? "cleanup-batch-preview" : "cleanup-batch-delete") ||
+          !req.headers["content-type"]?.startsWith("application/json")) {
+        send(res, 403, JSON.stringify({ error:"Local Prompt Studio only" })); return;
+      }
+      try {
+        const body=await readBody(req);
+        if (body.length > 8192) throw new Error("Too many selected files");
+        const input=JSON.parse(body.toString("utf8"));
+        const result=preview ? await previewCatalogCleanupBatch(input.ids,input.keep) :
+          await deleteCatalogCleanupBatch(input.token,input.mode);
+        send(res, 200, JSON.stringify(result));
+      } catch (cause) { send(res, 409, JSON.stringify({ error:String(cause?.message || cause).slice(0,300) })); }
+      return;
+    }
+    if (req.method === "POST" && ["/api/catalog/cleanup/start", "/api/catalog/cleanup/cancel"].includes(requestUrl.pathname)) {
+      if (req.headers.origin !== origin || req.headers["x-prompt-studio-action"] !== "cleanup-review") {
+        send(res, 403, JSON.stringify({ error:"Local Prompt Studio only" })); return;
+      }
+      const changed = requestUrl.pathname.endsWith("/start") ? startCatalogCleanup() : cancelCatalogCleanup();
+      send(res, 200, JSON.stringify({ changed, status:catalogCleanupStatus() })); return;
+    }
     if (req.method === "GET" && requestUrl.pathname === "/api/catalog/search") {
       send(res, 200, JSON.stringify(searchCatalog({ query:requestUrl.searchParams.get("q") || "",
         kind:requestUrl.searchParams.get("kind") || "", root:requestUrl.searchParams.get("root") || "",
         prompt:requestUrl.searchParams.get("prompt") || "",
         category:requestUrl.searchParams.get("category") || "", rating:requestUrl.searchParams.get("rating") || "0",
+        dateFrom:requestUrl.searchParams.get("from") || "", dateTo:requestUrl.searchParams.get("to") || "",
         page:requestUrl.searchParams.get("page") || "0" }))); return;
     }
     if (req.method === "GET" && requestUrl.pathname === "/api/catalog/creative-memory") {
@@ -229,7 +303,7 @@ export const server = createServer(async (req, res) => {
       return;
     }
     if ((req.method === "GET" && req.url === "/api/tags") ||
-        (req.method === "POST" && req.url === "/api/chat" && req.headers["content-type"]?.startsWith("application/json"))) {
+        (req.method === "POST" && ["/api/chat","/api/show"].includes(req.url) && req.headers["content-type"]?.startsWith("application/json"))) {
       const body = req.method === "POST" ? await readBody(req) : undefined;
       const answer = await fetch(ollama + req.url, {
         method: req.method,

@@ -38,7 +38,7 @@ assert.equal(mixArchivedPrompts(a,{...b,prompt:""}),null);
 
 const html=await readFile(new URL("./dist/ArtofTomworks_Prompt_Studio_OFFLINE.html",import.meta.url),"utf8");
 assert.match(html,/id="surprise-theme"/u);
-assert.match(html,/Idea cross-pollinator/u);
+assert.match(html,/mixArchivedPrompts/u);
 assert.match(html,/attachSurprisePrompt/u);
 const inline=html.match(/<script>\s*([\s\S]*?)\s*<\/script>/u)?.[1];
 assert.ok(inline,"built page should contain its inline application");

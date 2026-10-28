@@ -74,7 +74,7 @@ test("prompt checker suggests only an editable placeholder for a missing video a
 
 test("offline bundle contains a syntactically valid prompt coach", () => {
   const html=readFileSync(new URL("./dist/ArtofTomworks_Prompt_Studio_OFFLINE.html",import.meta.url),"utf8");
-  const script=html.match(/<script>\s*([\s\S]*?)<\/script>/u)?.[1];
+  const script=[...html.matchAll(/<script>\s*([\s\S]*?)<\/script>/gu)].map(match=>match[1]).find(source=>source.includes("attachPromptCoach"));
   assert.ok(script?.includes("attachPromptCoach"));
   assert.ok(script?.includes("coach-guide-review"));
   assert.ok(script?.includes("guideLoraMatches"));

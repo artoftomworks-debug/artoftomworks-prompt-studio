@@ -20,11 +20,12 @@ export function compareCatalogItems(a,b) {
   if (row("kind").state === "different") notes.push({key:"mixedMedia"});
   if (row("model").state === "different") notes.push({key:"modelChanged"});
   if (row("seed").state === "different") notes.push({key:"seedChanged"});
-  const promptA = a.prompt?.trim() || "", promptB = b.prompt?.trim() || "";
-  const prompt = { state:!promptA || !promptB ? "unknown" : promptA === promptB ? "same" : "different",
-    onlyA:promptA && promptB ? uniqueWords(promptA,promptB) : [],
-    onlyB:promptA && promptB ? uniqueWords(promptB,promptA) : [] };
+  const textDifference=(left,right)=>({state:!left||!right?"unknown":left===right?"same":"different",
+    onlyA:left&&right?uniqueWords(left,right):[],onlyB:left&&right?uniqueWords(right,left):[]});
+  const prompt=textDifference(a.prompt?.trim()||"",b.prompt?.trim()||"");
+  const negative=textDifference(a.negative?.trim()||"",b.negative?.trim()||"");
   if (prompt.state === "different") notes.push({key:"promptChanged"});
+  if (negative.state === "different") notes.push({key:"negativeChanged"});
   const pixelsA=Number(valueFor(a,"width"))*Number(valueFor(a,"height"));
   const pixelsB=Number(valueFor(b,"width"))*Number(valueFor(b,"height"));
   if (row("width").state !== "unknown" && row("height").state !== "unknown" && pixelsA !== pixelsB)
@@ -37,10 +38,29 @@ export function compareCatalogItems(a,b) {
   const ratingA=Number(a.rating)||0, ratingB=Number(b.rating)||0;
   if (ratingA !== ratingB && ratingA && ratingB) notes.push({key:"preferred",side:ratingA>ratingB ? "A" : "B"});
   if (notes.length === 0) notes.push({key:"noMeasuredDifference"});
-  return {rows,prompt,notes,missing:rows.filter((entry) => entry.state === "unknown").map((entry) => entry.key)};
+  return {rows,prompt,negative,notes,missing:rows.filter((entry) => entry.state === "unknown").map((entry) => entry.key)};
 }
 
 export const experimentStorageKey="artoftomworks.promptStudio.experiments.v1";
+
+// A test plan based on readable metadata, never a claim about visual causality.
+export function planNextExperiment(a,b,preferred) {
+  const comparison=compareCatalogItems(a,b);
+  const changed=comparison.rows.filter((row)=>row.state==="different").map((row)=>row.key);
+  if(comparison.prompt.state==="different")changed.push("prompt");
+  if(comparison.negative.state==="different")changed.push("negative");
+  const winner=preferred==="A"||preferred==="B"?preferred:null;
+  const sameModel=comparison.rows.find((row)=>row.key==="model")?.state==="same";
+  const sameKind=comparison.rows.find((row)=>row.key==="kind")?.state==="same";
+  const sameSeed=comparison.rows.find((row)=>row.key==="seed")?.state==="same";
+  const observedOnly=changed.length===1&&sameModel&&sameSeed;
+  // Start with a reversible prompt or setting test, not a model-family switch.
+  const eligible=["prompt","negative","cfg","steps","sampler","scheduler"].find((key)=>changed.includes(key));
+  return {
+    winner,changed,confidence:!winner?"noPreference":!changed.length?"noReadableChange":observedOnly?"oneRecordedChange":"severalOrUnknown",
+    next:winner&&sameModel&&sameKind&&eligible?{baseline:winner,field:eligible,alternative:winner==="A"?"B":"A"}:null
+  };
+}
 const snapshot=(item)=>({
   id:String(item.id||""),filename:String(item.filename||"").slice(0,260),
   kind:String(item.kind||"").slice(0,20),model:String(item.model||"").slice(0,260),
@@ -59,16 +79,18 @@ const journalValue=(value)=>{
   if(typeof value==="boolean")return value;
   return String(value??"").slice(0,300);
 };
-export function createExperimentEntry(a,b,{title="",preferred="none",reason="",runMinutesA="",runMinutesB="",id=globalThis.crypto?.randomUUID?.()||`exp-${Date.now()}-${Math.random().toString(36).slice(2)}`,createdAt=new Date().toISOString()}={}) {
+export function createExperimentEntry(a,b,{title="",preferred="none",reason="",nextTest="",runMinutesA="",runMinutesB="",id=globalThis.crypto?.randomUUID?.()||`exp-${Date.now()}-${Math.random().toString(36).slice(2)}`,createdAt=new Date().toISOString()}={}) {
   const comparison=compareCatalogItems(a,b);
   const preference=["A","B","tie","none"].includes(preferred)?preferred:"none";
+  const learning=planNextExperiment(a,b,preference);
   return {
     id:String(id||"").slice(0,80),createdAt:String(createdAt).slice(0,40),
     title:String(title||`${a.filename} ↔ ${b.filename}`).trim().slice(0,120),
-    preferred:preference,reason:String(reason||"").trim().slice(0,1200),
+    preferred:preference,reason:String(reason||"").trim().slice(0,1200),nextTest:String(nextTest||"").trim().slice(0,1200),
+    learningConfidence:learning.confidence,
     a:snapshot(a),b:snapshot(b),
     changed:comparison.rows.filter((row)=>row.state==="different").map(({key,a:left,b:right})=>({key,a:left,b:right})),
-    prompt:comparison.prompt,
+    prompt:comparison.prompt,negative:comparison.negative,
     runMinutesA:minutes(runMinutesA),runMinutesB:minutes(runMinutesB)
   };
 }
@@ -82,12 +104,17 @@ export function normalizeExperimentEntries(value) {
   }).map((item)=>({
     id:String(item.id).slice(0,80),createdAt:String(item.createdAt||"").slice(0,40),
     title:String(item.title||"").slice(0,120),preferred:["A","B","tie","none"].includes(item.preferred)?item.preferred:"none",
-    reason:String(item.reason||"").slice(0,1200),a:snapshot(item.a),b:snapshot(item.b),
+    reason:String(item.reason||"").slice(0,1200),nextTest:String(item.nextTest||"").slice(0,1200),
+    learningConfidence:["noPreference","noReadableChange","oneRecordedChange","severalOrUnknown"].includes(item.learningConfidence)?item.learningConfidence:"legacy",
+    a:snapshot(item.a),b:snapshot(item.b),
     changed:Array.isArray(item.changed)?item.changed.slice(0,20).filter((row)=>fields.includes(row?.key))
       .map((row)=>({key:row.key,a:journalValue(row.a),b:journalValue(row.b)})):[],
     prompt:{state:["same","different","unknown"].includes(item.prompt?.state)?item.prompt.state:"unknown",
       onlyA:Array.isArray(item.prompt?.onlyA)?item.prompt.onlyA.slice(0,12).map((value)=>String(value).slice(0,100)):[],
       onlyB:Array.isArray(item.prompt?.onlyB)?item.prompt.onlyB.slice(0,12).map((value)=>String(value).slice(0,100)):[]},
+    negative:{state:["same","different","unknown"].includes(item.negative?.state)?item.negative.state:"unknown",
+      onlyA:Array.isArray(item.negative?.onlyA)?item.negative.onlyA.slice(0,12).map((value)=>String(value).slice(0,100)):[],
+      onlyB:Array.isArray(item.negative?.onlyB)?item.negative.onlyB.slice(0,12).map((value)=>String(value).slice(0,100)):[]},
     runMinutesA:minutes(item.runMinutesA),runMinutesB:minutes(item.runMinutesB)
   }));
 }
@@ -102,6 +129,16 @@ export const catalogCompareCopy = {
   PT:{title:"Comparação A/B",chooseA:"Escolher A",chooseB:"Escolher B",clear:"Limpar",open:"Comparar e analisar",close:"Fechar",empty:"Escolha dois itens diferentes.",preview:"Mostrar prévias A/B",hidden:"Prévias ocultas até as mostrar.",playBoth:"Reproduzir ambos",pauseBoth:"Parar ambos",facts:"Diferenças verificáveis",tradeoffs:"Possíveis vantagens e compromissos",visual:"Observações visuais",runVisual:"Analisar imagens localmente",working:"Análise local das imagens…",visualMissing:"gemma3:4b local indisponível. A comparação dos dados continua disponível.",visualFailed:"Análise visual incompleta. A comparação continua disponível.",visualNeedsPreview:"Mostre primeiro as prévias.",disclaimer:"Notas baseadas em imagens selecionadas, não em classificações objetivas. Movimento e som não são avaliados.",unknown:"Não legível",same:"Igual",different:"Diferente",prompt:"Prompt",onlyA:"Só em A",onlyB:"Só em B",none:"Nenhum",kind:"Tipo",model:"Modelo",width:"Largura",height:"Altura",duration:"Duração (s)",fps:"FPS",frames:"Fotogramas",steps:"Passos",cfg:"CFG",seed:"Seed",sampler:"Sampler",scheduler:"Scheduler",loras:"LoRA",mixedMedia:"Imagem e vídeo são tipos diferentes.",modelChanged:"O modelo mudou; diferenças não se atribuem a uma definição só.",seedChanged:"O seed mudou; não é um teste de variável única.",promptChanged:"O prompt mudou; veja as palavras exclusivas abaixo.",morePixels:"{side} tem mais píxeis: talvez mais detalhe, mas mais trabalho. Não é um veredicto de qualidade.",longer:"{side} é mais longo: mais tempo de cena, mas possível custo e risco de continuidade.",moreFps:"{side} tem mais FPS: talvez mais fluidez, mas mais fotogramas.",preferred:"Avaliou {side} melhor; é a sua preferência, não uma nota objetiva.",noMeasuredDifference:"Sem diferença fiável nos campos legíveis. O aspeto pode diferir.",aStrengths:"A – pontos fortes",aWeaknesses:"A – atenção",bStrengths:"B – pontos fortes",bWeaknesses:"B – atenção",notable:"Diferenças visíveis",nextTest:"Próximo teste sugerido"},
   PL:{title:"Porównanie A/B",chooseA:"Wybierz A",chooseB:"Wybierz B",clear:"Wyczyść",open:"Porównaj i analizuj",close:"Zamknij",empty:"Wybierz dwa różne elementy.",preview:"Pokaż podgląd A/B",hidden:"Podgląd pozostaje ukryty, dopóki go nie włączysz.",playBoth:"Odtwórz oba",pauseBoth:"Zatrzymaj oba",facts:"Potwierdzone różnice",tradeoffs:"Możliwe zalety i kompromisy",visual:"Obserwacje wizualne",runVisual:"Analizuj klatki lokalnie",working:"Lokalna analiza obrazów…",visualMissing:"Lokalny gemma3:4b niedostępny. Porównanie danych pozostaje dostępne.",visualFailed:"Analiza wizualna nie zakończyła się. Porównanie pozostaje dostępne.",visualNeedsPreview:"Najpierw pokaż podgląd.",disclaimer:"Uwagi z wybranych klatek nie są obiektywną oceną jakości. Ruch i dźwięk nie są oceniane.",unknown:"Nieodczytane",same:"Takie same",different:"Różne",prompt:"Prompt",onlyA:"Tylko w A",onlyB:"Tylko w B",none:"Brak",kind:"Typ",model:"Model",width:"Szerokość",height:"Wysokość",duration:"Czas (s)",fps:"FPS",frames:"Klatki",steps:"Kroki",cfg:"CFG",seed:"Seed",sampler:"Sampler",scheduler:"Scheduler",loras:"LoRA",mixedMedia:"Obraz i film to różne typy mediów.",modelChanged:"Model się zmienił; różnic nie można przypisać jednemu ustawieniu.",seedChanged:"Seed się zmienił; nie jest to test jednej zmiennej.",promptChanged:"Prompt się zmienił; poniżej widać słowa unikalne dla każdej wersji.",morePixels:"{side} ma więcej pikseli: możliwa większa szczegółowość, ale większy koszt. To nie ocena jakości.",longer:"{side} jest dłuższy: więcej czasu sceny, ale możliwy większy koszt i ryzyko spójności.",moreFps:"{side} ma więcej FPS: możliwa płynność, ale więcej klatek.",preferred:"Wyżej oceniono {side}; to Twoja preferencja, nie obiektywna punktacja.",noMeasuredDifference:"Brak pewnych różnic w odczytanych polach. Obraz nadal może się różnić.",aStrengths:"A – zalety",aWeaknesses:"A – uwagi",bStrengths:"B – zalety",bWeaknesses:"B – uwagi",notable:"Widoczne różnice",nextTest:"Sugerowany następny test"}
 };
+for (const [language,labels] of Object.entries({
+  EN:["Negative prompt","The readable negative prompts differ; check those terms too."],
+  HU:["Negatív prompt","A kiolvasható negatív promptok is eltérnek; ezeket is vedd figyelembe."],
+  DE:["Negativ-Prompt","Die lesbaren Negativ-Prompts unterscheiden sich."],
+  FR:["Prompt négatif","Les prompts négatifs lisibles diffèrent également."],
+  ES:["Prompt negativo","También cambian los prompts negativos legibles."],
+  IT:["Prompt negativo","Anche i prompt negativi leggibili sono diversi."],
+  PT:["Prompt negativo","Os prompts negativos legíveis também são diferentes."],
+  PL:["Negatywny prompt","Odczytane negatywne prompty także się różnią."]
+})) { catalogCompareCopy[language].negative=labels[0]; catalogCompareCopy[language].negativeChanged=labels[1]; }
 for (const [language,label] of Object.entries({EN:"Stage seeds",HU:"Szakasz seedek",DE:"Stufen-Seeds",FR:"Seeds des étapes",ES:"Seeds por etapa",IT:"Seed delle fasi",PT:"Seeds das fases",PL:"Seedy etapów"}))
   catalogCompareCopy[language].seeds=label;
 for (const [language,labels] of Object.entries({

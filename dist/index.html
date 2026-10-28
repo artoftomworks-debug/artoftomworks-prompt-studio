@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="description" content="ArtofTomworks Prompt Studio – local-first image and video prompt ideas, model-aware resolution suggestions, and multilingual prompts.">
   <title>ArtofTomworks · Prompt Studio</title>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem("artoftomworks.v2.theme")==="black"?"black":"navy"}catch{document.documentElement.dataset.theme="navy"}</script>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./app.mjs"></script>
 </head>
@@ -19,7 +20,12 @@
         <span class="brand-copy"><strong>ArtofTomworks</strong><small>PROMPT STUDIO</small></span>
       </a>
       <div class="header-right">
-        <span class="edition">IMAGE WORKBENCH GLOBAL <b>1.19</b></span>
+        <span class="edition">IMAGE WORKBENCH GLOBAL <b>1.20.0</b></span>
+        <label class="compact-select theme-select"><span id="ui-theme-label">Appearance</span>
+          <select id="ui-theme" aria-label="Appearance">
+            <option value="navy">Dark blue</option><option value="black">Black</option>
+          </select>
+        </label>
         <label class="compact-select"><span data-i18n="interfaceLanguage">Interface language</span>
           <select id="ui-language" aria-label="Interface language">
             <option value="HU">Magyar</option><option value="EN" selected>English</option>
@@ -39,8 +45,14 @@
     </section>
     <section class="surprise-card" aria-labelledby="surprise-title">
       <div class="surprise-heading"><span class="eyebrow">INSPIRATION / 00</span><h2 id="surprise-title">Start with a spark</h2><p id="surprise-intro">Choose a theme or leave it to chance. A fresh English prompt appears here for you to edit.</p></div>
-      <div class="surprise-controls"><select id="surprise-theme" aria-label="Prompt theme"></select><select id="surprise-kind" aria-label="Image or video prompt"></select><button id="surprise-generate" type="button" class="primary-action">✦ Surprise me with a prompt</button></div>
-      <div id="surprise-output-wrap" class="surprise-output" hidden><textarea id="surprise-output" rows="4" aria-label="Editable surprise prompt"></textarea><div class="surprise-actions"><button id="surprise-use" type="button" class="secondary-action">Use in editor</button><button id="surprise-copy" type="button" class="quiet-action">Copy prompt</button><span id="surprise-status" role="status" aria-live="polite"></span></div></div>
+      <div class="surprise-controls"><select id="surprise-theme" aria-label="Prompt theme"></select><select id="surprise-kind" aria-label="Image or video prompt"></select><select id="surprise-model" aria-label="Image model"><option value="flux">FLUX</option><option value="other">Other image model</option></select><button id="surprise-generate" type="button" class="primary-action">✦ Surprise me with a prompt</button></div>
+      <div class="surprise-layout">
+        <label><span id="surprise-resolution-label">Resolution</span><select id="surprise-resolution"><option value="">Unspecified</option><option value="custom">Custom</option></select></label>
+        <div id="surprise-custom-size" class="surprise-custom-size" hidden><label><span id="surprise-width-label">Width</span><input id="surprise-width" type="number" min="256" max="8192" step="8" inputmode="numeric"></label><label><span id="surprise-height-label">Height</span><input id="surprise-height" type="number" min="256" max="8192" step="8" inputmode="numeric"></label></div>
+        <label><span id="surprise-framing-label">Framing</span><select id="surprise-framing"><option value="auto">Automatic</option></select></label>
+        <small id="surprise-layout-help"></small>
+      </div>
+      <div id="surprise-output-wrap" class="surprise-output" hidden><textarea id="surprise-output" rows="4" aria-label="Editable surprise prompt"></textarea><div id="surprise-negative-wrap" class="surprise-negative" hidden><label for="surprise-negative-prompt" id="surprise-negative-label">Optional negative prompt</label><textarea id="surprise-negative-prompt" rows="2"></textarea><small id="surprise-negative-help">FLUX mainly follows positive directions; use a negative prompt only if your workflow supports it.</small></div><div class="surprise-actions"><button id="surprise-use" type="button" class="secondary-action">Use in editor</button><button id="surprise-copy" type="button" class="quiet-action">Copy prompt</button><button id="surprise-copy-negative" type="button" class="quiet-action" hidden>Copy negative</button><span id="surprise-status" role="status" aria-live="polite"></span></div></div>
     </section>
     <div class="custom-library-toolbar"><span id="custom-library-help">My choices are saved in this browser. Export a backup to use them elsewhere.</span><button type="button" id="custom-library-export">Export choices</button><button type="button" id="custom-library-import">Import choices</button><input id="custom-library-file" type="file" accept="application/json,.json" hidden><span id="custom-library-status" role="status" aria-live="polite"></span></div>
 
@@ -189,12 +201,14 @@
              <p class="image-direction-help image-controls" id="still-art-help" hidden></p>
             <p class="image-direction-help image-controls" id="still-direction-help"></p>
             <div class="field"><label for="negatives" data-i18n="negatives">Avoid</label><textarea id="negatives" name="negatives" rows="2" data-placeholder="negativePlaceholder"></textarea></div>
+            <label class="toggle-line image-controls" for="anatomy"><input id="anatomy" name="anatomy" type="checkbox" checked><span class="toggle-ui"></span><span id="anatomy-label">Help with human hands and feet</span></label>
+            <p class="image-direction-help image-controls" id="anatomy-help">For human subjects only. FLUX gets positive anatomical directions; other models also get negative exclusions. Review before use; no prompt can guarantee correct anatomy.</p>
           </section>
 
           <section class="form-card">
             <h2><span class="step-number">03</span><span data-i18n="technicalStep">3 · Technical and sound</span></h2>
             <div class="select-grid image-controls">
-              <div class="field"><label for="model" data-i18n="model">Image model</label><select id="model" name="model"><option value="krea2">Krea 2 / Krea style</option><option value="sdxl">SDXL</option><option value="generic">Other</option></select></div>
+              <div class="field"><label for="model" data-i18n="model">Image model</label><select id="model" name="model"><option value="krea2">Krea 2 / Krea style</option><option value="sdxl">SDXL</option><option value="flux">FLUX</option><option value="generic">Other</option></select></div>
               <div class="field"><label for="frame" data-i18n="frame">Composition</label><select id="frame" name="frame"></select></div>
               <div class="field"><label for="memory" data-i18n="memory">Hardware profile</label><select id="memory" name="memory"></select></div>
               <div class="field"><label for="quality" data-i18n="quality">Detail level</label><select id="quality" name="quality"></select></div>
@@ -277,11 +291,31 @@
           <div class="result-actions"><button type="button" id="i2i-copy" class="secondary-action" data-i2i="copy">Copy prompt</button><button type="button" id="i2i-download" class="secondary-action" data-i2i="download">Download TXT</button><button type="button" id="i2i-clear-prompt" class="quiet-action">Clear prompt</button></div>
           <p class="result-note" data-i2i="disclaimer">Prompts and sizes are starting suggestions. Use the same reference image in your image-to-image workflow; this page does not generate images.</p>
         </section>
+        <section id="prompt-workbench" class="result-card prompt-workbench" aria-labelledby="workbench-title">
+          <div class="result-heading"><div><span class="eyebrow">WORKBENCH / 02</span><h2 id="workbench-title">Prompt workbench</h2></div><span class="result-spark">✦</span></div>
+          <div class="workbench-body">
+            <p id="workbench-intro"></p>
+            <button type="button" id="workbench-load" class="secondary-action"></button>
+            <label class="workbench-field"><span id="workbench-source-label"></span><textarea id="workbench-source" readonly rows="5"></textarea></label>
+            <label class="workbench-field"><span id="workbench-draft-label"></span><textarea id="workbench-draft" rows="7"></textarea></label>
+            <label class="workbench-field"><span id="workbench-negative-label"></span><textarea id="workbench-negative" rows="3"></textarea></label>
+            <div class="workbench-actions"><button type="button" id="workbench-check"></button><button type="button" id="workbench-reset"></button><button type="button" id="workbench-ask-ai"></button><button type="button" id="workbench-copy"></button></div>
+            <p id="workbench-status" role="status" aria-live="polite"></p><ul id="workbench-issues"></ul>
+            <div class="workbench-tools-heading"><h3 id="workbench-tools-title"></h3><button type="button" id="workbench-add-tool"></button></div>
+            <div id="workbench-tools"></div>
+            <div id="workbench-tool-editor" class="workbench-tool-editor" hidden>
+              <label class="workbench-field"><span id="workbench-tool-name-label"></span><input id="workbench-tool-name" maxlength="60"></label>
+              <label class="workbench-field"><span id="workbench-tool-kind-label"></span><select id="workbench-tool-kind"><option value="web"></option><option value="exe"></option></select></label>
+              <label class="workbench-field"><span id="workbench-tool-target-label"></span><input id="workbench-tool-target" maxlength="1024"></label>
+              <div class="workbench-actions"><button type="button" id="workbench-tool-save"></button><button type="button" id="workbench-tool-cancel"></button></div>
+            </div>
+          </div>
+        </section>
         <div class="side-tip"><span class="tip-symbol">↗</span><p data-i18n="tips">Tip: describe video motion in sequence, with only a few competing actions.</p></div>
       </aside>
     </main>
 
-    <footer><span>© ArtofTomworks · Prompt Studio</span><span data-i18n="privacy">Your text stays in your browser · a language pack may download</span></footer>
+    <footer><span>© ArtofTomworks · Prompt Studio</span><span data-i18n="privacy">Your text stays in your browser · a language pack may download</span><button type="button" id="back-to-top" class="back-top">↑ Back to top</button></footer>
   </div>
 </body>
 </html>

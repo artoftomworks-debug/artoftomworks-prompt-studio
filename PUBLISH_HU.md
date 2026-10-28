@@ -1,27 +1,8 @@
-# GitHubra feltöltés — tulajdonosi ellenőrzőlista
+# A két feltöltés
 
-Ez a mappa a Prompt Studio **külön, tiszta forráskiadása**. Nem a saját, már használt `Studio119` telepítésed másolata. A program a felhasználó gépén fut; a GitHubra feltöltött kód nem teszi nyilvánossá a helyi médiaarchívumot.
-
-## Mielőtt nyilvánossá teszed
-
-1. **Csak ennek a mappának a tartalmát** töltsd fel egy új GitHub-tárhelyre. Ne a `Studio119`, a teljes `releases`, a `Backups` vagy az egész Codex-mappát.
-2. Nézd át a fájllistát. A csomagban nincs `data/`, `runtime/`, `addon-library-roots.json`, kép, videó vagy modell. A `.gitignore` a később helyben keletkező személyes fájlokat is kizárja, de **önmagában nem helyettesíti** a feltöltés előtti ellenőrzést.
-3. Döntsd el, hogy a tárhely **privát** vagy **nyilvános** legyen. Ha bizonytalan vagy, először privátként hozd létre; később külön dönthetsz a nyilvánossá tételről.
-4. Dönts a felhasználási feltételekről. A csomaghoz **nem választottam helyetted licencet**. Licenc nélkül a nyilvános kód megtekinthető, de ez nem jelent automatikus engedélyt a másolásra, módosításra vagy terjesztésre. Ha szeretnéd, külön kiválasztjuk a megfelelő licencet, és csak utána tesszük nyilvánossá.
-5. Az első feltöltés után a GitHubon is ellenőrizd, hogy nem került fel személyes adat. Ha egyszer egy érzékeny fájl bekerült a Git-előzményekbe, a későbbi törlés önmagában nem feltétlenül távolítja el onnan.
-
-## Mit tartalmaz
-
-- `README.md`: angol fő leírás és használati útmutató.
-- `README_HU.md`, `QUICKSTART_8_LANGUAGES.md`: magyar és többnyelvű segítség.
-- `dist/`, a helyi kiszolgáló és az indítók: futtatható alkalmazás és forráskód.
-- `test-*.mjs`: ellenőrző tesztek.
-- `.gitignore`: védelem a később keletkező helyi adatok véletlen verziókövetése ellen.
-
-## Használat egy másik gépen
-
-Töltsd le a tárhely ZIP-ét, bontsd ki egy írható Windows-mappába, majd indítsd a `START.cmd` fájlt. A részletes leírás a `README.md` és `README_HU.md` fájlban van. Első indításkor a program üres archívummal indul; a felhasználó a saját médiamappáit adja hozzá. Nem kell feltöltenie a képeit vagy videóit a GitHubra.
-
-## Fontos működési korlát
-
-Ez **helyi Windows-alkalmazás**, nem GitHub Pages-webhely. A GitHub a kód és a leírás közzétételére szolgál; a médiaarchívum és az opcionális AI a felhasználó gépén marad. A külön Workflow Studio nem része ennek a csomagnak; az ahhoz kapcsolódó gomb csak akkor használható, ha az a program is telepítve és elindítva van.
+- **GitHub:** a GitHub ZIP a forráscsomag. A meglévő tárhely frissítéséhez annak tartalmát használd; nem tartalmaz `.git` előzményeket. Az 1.20.0 kiadáshoz Windows letöltésként a Civitai ZIP is csatolható. A tárhely címe: https://github.com/artoftomworks-debug/artoftomworks-prompt-studio
+- **Civitai:** a `Prompt_Studio_1.20.0_Windows_Civitai_20261028.zip` fájlt töltsd fel új verzióként. Ez teljes telepítés, nem a személyes gépedhez kötött frissítő.
+- A változásjegyzék: `CHANGELOG.md` és `CHANGELOG_HU.md`. A bemutató és rövid verziószöveg külön bemutatócsomagban is rendelkezésre áll.
+- A jóváhagyott feltételek a `LICENSE.txt` fájlban vannak: ingyenes használat és módosítás, fizetős alkotásokhoz is; a program továbbértékesítése külön engedély nélkül tilos. A felületi engedélyeket ehhez igazítsd. Ne jelöld MIT-nek.
+- A csomagokban nincs személyes archívum, kép, videó, MI-modell, futtatókörnyezet vagy saját indító. Saját `data/`, `runtime/`, `Backups/`, helyi beállítások és naplók nem kerülhetnek a feltöltésbe.
+- Az SHA-256 ellenőrzőlisták és a ZIP-ek ki lettek ellenőrizve. A nyilvános feltöltés külön lépés; ez az előkészítés nem publikál semmit.

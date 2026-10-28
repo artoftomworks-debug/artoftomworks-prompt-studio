@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSCommandPath
 $runtime = Join-Path $project 'runtime'
 $localNode = Join-Path $runtime 'node.exe'
@@ -70,7 +70,7 @@ try {
     }
   }
   Write-Host 'Core setup is complete. Double-click START.cmd.'
-  Write-Host 'Optional local AI: install Ollama from https://ollama.com/download/windows and run: ollama pull gemma3:4b'
+  Write-Host 'Optional local AI: install Ollama separately. See LOCAL_AI_GUIDE.md to choose a text or vision model. Some legacy translation tools use gemma3:4b.'
   exit 0
 } catch {
   Write-Host ('SETUP ERROR: ' + $_.Exception.Message) -ForegroundColor Red

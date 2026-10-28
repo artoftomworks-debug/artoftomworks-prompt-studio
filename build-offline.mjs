@@ -30,13 +30,12 @@ const promptLibrary = readFileSync(file("prompt-library.mjs"), "utf8")
   .replace(/^import \{[^}]+\} from "\.\/prompt-media\.mjs";\r?\n/, "")
   .replace(/^export /gm, "");
 const catalogCompare = readFileSync(file("catalog-compare.mjs"), "utf8").replace(/^export /gm, "");
-const creativeForge = "const { attachSurprisePrompt, mixArchivedPrompts } = (() => {\n" +
-  readFileSync(file("creative-forge.mjs"), "utf8").replace(/^export /gm, "") +
-  "\nreturn { attachSurprisePrompt, mixArchivedPrompts };\n})();";
-const negativeAdvisor = readFileSync(file("negative-advisor.mjs"), "utf8").replace(/^export /gm, "");
+const creatorPassport = "const { buildCreatorPassport, buildPromptCorrectionMessages, cleanPromptCorrectionResponse, MAX_CORRECTION_INPUT } = (() => {\n" +
+  readFileSync(file("creator-passport.mjs"), "utf8").replace(/^export /gm, "") +
+  "\nreturn { buildCreatorPassport, buildPromptCorrectionMessages, cleanPromptCorrectionResponse, MAX_CORRECTION_INPUT };\n})();";
 const mediaCatalogUi = readFileSync(file("media-catalog-ui.mjs"), "utf8")
   .replace(/^import \{[^}]+\} from "\.\/catalog-compare\.mjs";\r?\n/, "")
-  .replace(/^import \{[^}]+\} from "\.\/creative-forge\.mjs";\r?\n/, "")
+  .replace(/^import \{[^}]+\} from "\.\/creator-passport\.mjs";\r?\n/, "")
   .replace(/^export /gm, "");
 const directorEngine = readFileSync(file("director-engine.mjs"), "utf8").replace(/^export /gm, "");
 const promptCoach = readFileSync(file("sentence-bank.mjs"), "utf8").replace(/^export /gm, "") + "\n" +
@@ -48,6 +47,7 @@ const directorUi = readFileSync(file("director-ui.mjs"), "utf8")
   .replace(/^import \{[^}]+\} from "\.\/director-engine\.mjs";\r?\n/, "")
   .replace(/^export /gm, "");
 const i2vUi = readFileSync(file("i2v-ui.mjs"), "utf8")
+  .replace(/^import \{[^}]+\} from "\.\/ai-hub\.mjs";\r?\n/, "")
   .replace(/^import \{[^}]+\} from "\.\/i2v-engine\.mjs";\r?\n/, "")
   .replace(/^import \{[^}]+\} from "\.\/camera-motion\.mjs";\r?\n/, "")
   .replace(/^import \{[^}]+\} from "\.\/sound-effects\.mjs";\r?\n/, "")
@@ -80,16 +80,22 @@ const app = readFileSync(file("app.mjs"), "utf8")
   .replace(/^import \{[^}]+\} from "\.\/media-catalog-ui\.mjs";\r?\n/, "")
   .replace(/^import \{[^}]+\} from "\.\/director-ui\.mjs";\r?\n/, "")
   .replace(/^import \{[^}]+\} from "\.\/prompt-coach\.mjs";\r?\n/, "");
-const appBundled = app.replace(/^import \{[^}]+\} from "\.\/addon-advisor\.mjs";\r?\n/, "")
-  .replace(/^import \{[^}]+\} from "\.\/creative-forge\.mjs";\r?\n/, "")
-  .replace(/^import \{[^}]+\} from "\.\/negative-advisor\.mjs";\r?\n/, "");
+const creativeForge = readFileSync(file("creative-forge.mjs"), "utf8").replace(/^export /gm, "");
+const aiHub = readFileSync(file("ai-hub.mjs"), "utf8").replace(/^export /gm, "") + "\n" +
+  "const attachPromptWorkbench = (() => {\n" +
+  readFileSync(file("prompt-workbench.mjs"), "utf8").replace(/^export /gm, "") +
+  "\nreturn attachPromptWorkbench;\n})();";
+const appBundled = app.replace("import { attachSurprisePrompt } from \"./creative-forge.mjs\";\n", "")
+  .replace(/^import \{[^}]+\} from "\.\/addon-advisor\.mjs";\r?\n/, "")
+  .replace(/^import \{[^}]+\} from "\.\/ai-hub\.mjs";\r?\n/, "")
+  .replace(/^import \{[^}]+\} from "\.\/prompt-workbench\.mjs";\r?\n/, "");
 if (appBundled.startsWith("import ") || i2vUi.startsWith("import ") || i2iUi.startsWith("import ") || html.includes("</style>")) {
   throw new Error("Unexpected source layout; offline build stopped.");
 }
 const output = html
   .replace('  <link rel="stylesheet" href="./style.css">\n', "  <style>\n" + css + "\n  </style>\n")
   .replace('  <script type="module" src="./app.mjs"></script>\n', "")
-.replace("</body>", "  <script>\n" + imageDirection + "\n" + productionLook + "\n" + qualityPrefix + "\n" + customChoices + "\n" + engine + "\n" + i2vEngine + "\n" + cameraMotion + "\n" + soundEffects + "\n" + translationGlossary + "\n" + bilingualEditor + "\n" + modeContinuity + "\n" + "\nconst attachPromptCoach = (() => {\n" + promptCoach + "\nreturn attachPromptCoach;\n})();\nconst attachPromptLibrary = (() => {\n" + promptMedia + "\n" + promptLibrary + "\nreturn attachPromptLibrary;\n})();\nconst attachDirectorTimeline = (() => {\n" + directorEngine + "\n" + directorUi + "\nreturn attachDirectorTimeline;\n})();\n" + catalogCompare + "\n" + creativeForge + "\n" + negativeAdvisor + "\n" + mediaCatalogUi + "\n" + addonAdvisor + "\n" + metadata + "\n" + i2vUi + "\nconst attachImageToImage = (() => {\n" + i2iEngine + "\n" + i2iUi + "\nreturn attachImageToImage;\n})();\n" + appBundled + "\n  </script>\n</body>");
+.replace("</body>", "  <script>\n" + imageDirection + "\n" + productionLook + "\n" + qualityPrefix + "\n" + customChoices + "\n" + engine + "\n" + i2vEngine + "\n" + cameraMotion + "\n" + soundEffects + "\n" + translationGlossary + "\n" + bilingualEditor + "\n" + modeContinuity + "\n" + "\nconst attachPromptCoach = (() => {\n" + promptCoach + "\nreturn attachPromptCoach;\n})();\nconst attachPromptLibrary = (() => {\n" + promptMedia + "\n" + promptLibrary + "\nreturn attachPromptLibrary;\n})();\nconst attachDirectorTimeline = (() => {\n" + directorEngine + "\n" + directorUi + "\nreturn attachDirectorTimeline;\n})();\n" + catalogCompare + "\n" + creatorPassport + "\n" + mediaCatalogUi + "\n" + addonAdvisor + "\n" + creativeForge + "\n" + aiHub + "\n" + metadata + "\n" + i2vUi + "\nconst attachImageToImage = (() => {\n" + i2iEngine + "\n" + i2iUi + "\nreturn attachImageToImage;\n})();\n" + appBundled + "\n  </script>\n</body>");
 if (output.includes('src="./app.mjs"') || !output.includes("function recommendResolution")) {
   throw new Error("Offline bundle validation failed.");
 }

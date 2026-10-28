@@ -1,27 +1,23 @@
 name: Prompt Studio tests
-
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   test:
     runs-on: windows-latest
     timeout-minutes: 10
     env:
-      # A port chosen by Windows avoids conflicting with a running local Studio.
       PROMPT_STUDIO_PORT: '0'
     steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
-      - name: Run tests
-        run: node --test
+      - name: Rebuild the served page
+        run: node build-offline.mjs
+      - name: Run checks
+        run: node --test --test-concurrency=1

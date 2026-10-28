@@ -19,7 +19,7 @@ export function normalizePromptEntries(raw) {
     found.add(id);
     const tags = Array.isArray(item.tags) ? item.tags : String(item.tags || "").split(",");
     result.push({
-      id, title, category, prompt, negative:clean(item.negative,10000), mode:item.mode,
+      id, title, category, prompt, negative:clean(item.negative, 50000), mode:item.mode,
       language:languages.has(item.language) ? item.language : "EN",
       tags:[...new Set(tags.map((tag) => clean(tag, 35)).filter(Boolean))].slice(0, 12),
       notes:clean(item.notes, 500), model:clean(item.model, 120),
@@ -61,7 +61,6 @@ const mediaCopy = {
 };
 const commonCategories = ["Portrait", "Fashion", "Nature", "Animals", "Architecture", "Fantasy", "Sci-fi", "Product", "Erotic", "Other"];
 const modeLabels = { image:"modeImage", video:"modeVideo", i2i:"modeI2i", i2v:"modeI2v" };
-const negativeLabels = {EN:"Negative",HU:"Negatív",DE:"Negativ",FR:"Négatif",ES:"Negativo",IT:"Negativo",PT:"Negativo",PL:"Negatywny"};
 
 export function attachPromptLibrary({ getLanguage, getCurrent, restore }) {
   const t = () => ({ ...copy.EN, ...mediaCopy.EN, ...(copy[getLanguage()] || {}), ...(mediaCopy[getLanguage()] || {}) });
@@ -169,7 +168,6 @@ export function attachPromptLibrary({ getLanguage, getCurrent, restore }) {
       const meta = document.createElement("small"); meta.textContent = `${entry.category} · ${t()[modeLabels[entry.mode]]} · ${entry.language}${entry.model ? ` · ${entry.model}` : ""}`;
       const tagLine = document.createElement("span"); tagLine.textContent = entry.tags.length ? entry.tags.map((tag) => `#${tag}`).join("  ") : "";
       detail.append(heading, meta, tagLine);
-      if(entry.negative){const negativeLine=document.createElement("small");negativeLine.textContent=`${negativeLabels[getLanguage()]||negativeLabels.EN}: ${entry.negative.slice(0,140)}${entry.negative.length>140?"…":""}`;detail.append(negativeLine);}
       if (entry.videoName) { const videoLine = document.createElement("span"); videoLine.textContent = `🎬 ${entry.videoName}`; detail.append(videoLine); }
       if (entry.sampleImageName) {
         const thumb = document.createElement("img"); thumb.className = "library-thumb"; thumb.alt = entry.sampleImageName; thumb.loading = "lazy";
@@ -208,7 +206,7 @@ export function attachPromptLibrary({ getLanguage, getCurrent, restore }) {
     if (current.prompt.trim().length > 50000) { status.textContent = t().tooLong; return; }
     if (!name.value.trim() || !category.value.trim()) { status.textContent = t().needMeta; return; }
     if (entries.length >= promptLibraryLimit) { status.textContent = t().full; return; }
-    if (entries.some((item) => item.title.toLocaleLowerCase() === name.value.trim().toLocaleLowerCase() && item.mode === current.mode && item.prompt === current.prompt.trim() && item.negative === String(current.negative||"").trim() && item.videoName === videoFileName(videoName.value))) { status.textContent = t().same; return; }
+    if (entries.some((item) => item.title.toLocaleLowerCase() === name.value.trim().toLocaleLowerCase() && item.mode === current.mode && item.prompt === current.prompt.trim() && item.negative === clean(current.negative,50000) && item.videoName === videoFileName(videoName.value))) { status.textContent = t().same; return; }
     const candidate = normalizePromptEntries([{ id:uid(), title:name.value, category:category.value, tags:tags.value, notes:notes.value,
       videoName:videoName.value, sampleImageName:pendingSampleName,
       mode:current.mode, language:current.language, model:current.model, prompt:current.prompt, negative:current.negative, createdAt:new Date().toISOString() }])[0];
@@ -251,13 +249,13 @@ export function attachPromptLibrary({ getLanguage, getCurrent, restore }) {
     try {
       const data = JSON.parse(await file.text());
       if (data?.version !== 1 || !Array.isArray(data?.entries)) throw new Error("format");
-      const seen = new Set(entries.map((item) => `${item.mode}\u0000${item.title}\u0000${item.prompt}\u0000${item.videoName}`));
+      const seen = new Set(entries.map((item) => `${item.mode}\u0000${item.title}\u0000${item.prompt}\u0000${item.negative}\u0000${item.videoName}`));
       const usedIds = new Set(entries.map((item) => item.id));
       const newEntries = [], images = [];
       for (const raw of data.entries) {
         const entry = normalizePromptEntries([raw])[0];
         if (!entry) throw new Error("entries");
-        const key = `${entry.mode}\u0000${entry.title}\u0000${entry.prompt}\u0000${entry.videoName}`;
+        const key = `${entry.mode}\u0000${entry.title}\u0000${entry.prompt}\u0000${entry.negative}\u0000${entry.videoName}`;
         if (seen.has(key)) continue;
         seen.add(key);
         while (usedIds.has(entry.id)) entry.id = uid();

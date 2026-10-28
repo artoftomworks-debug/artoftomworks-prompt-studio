@@ -1,6 +1,6 @@
 # Companion ComfyUI video workflows
 
-These are five clean backups of the owner's saved ComfyUI graphs. They are **not** the separate Workflow Studio application and do not run inside Prompt Studio. The Prompt Studio `v1.19.0` download ZIP was made before these backups were added; download the JSON files from this folder when needed.
+These are five clean backups of the owner's saved ComfyUI graphs. They are **not** the separate Workflow Studio application and do not run inside Prompt Studio. These backups are preserved in the GitHub source package; they are not included in the Civitai Windows app ZIP. Their model and node dependencies remain separate.
 
 | Model family | Simpler graph | More controls |
 | --- | --- | --- |

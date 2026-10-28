@@ -417,10 +417,40 @@ function localizedOption(group, key, language) {
   return row[languages.indexOf(language)] || row[1];
 }
 
+const humanSubject = /(?:^|[^\p{L}])(?:person|people|woman|women|man|men|adult|child|girl|boy|dancer|artist|musician|traveler|traveller|model|portrait|human|ember|nő|nők|férfi|felnőtt|gyerek|lány|fiú|táncos|művész|portré|mensch|frau|mann|kind|tänzer|personne|femme|homme|enfant|danseur|persona|mujer|hombre|niño|niña|bailarín|donna|uomo|bambino|ballerino|pessoa|mulher|homem|criança|dançarino|osoba|kobieta|mężczyzna|dziecko|tancerz)(?=$|[^\p{L}])/iu;
+const anatomyPositive = {
+  EN:"If hands are visible, each hand has four distinct fingers and one opposable thumb, naturally attached with plausible joints and proportions. If bare feet are visible, each foot has five separate toes; legs and ankles connect naturally.",
+  HU:"Ha a kezek láthatók, mindegyiken négy különálló ujj és egy hüvelykujj van, természetes csatlakozással, ízületekkel és arányokkal. Ha a mezítelen lábak láthatók, mindegyik lábfejen öt különálló lábujj van; a lábszár és a boka természetesen kapcsolódik.",
+  DE:"Wenn Hände sichtbar sind, hat jede Hand vier getrennte Finger und einen Daumen, natürlich verbunden und proportioniert. Wenn nackte Füße sichtbar sind, hat jeder Fuß fünf getrennte Zehen; Beine und Knöchel sind natürlich verbunden.",
+  FR:"Si les mains sont visibles, chacune a quatre doigts distincts et un pouce, avec des articulations et des proportions naturelles. Si les pieds nus sont visibles, chacun a cinq orteils distincts ; les jambes et les chevilles sont cohérentes.",
+  ES:"Si se ven las manos, cada una tiene cuatro dedos separados y un pulgar, con articulaciones y proporciones naturales. Si se ven los pies descalzos, cada uno tiene cinco dedos separados; las piernas y los tobillos se unen de forma natural.",
+  IT:"Se le mani sono visibili, ognuna ha quattro dita distinte e un pollice, con articolazioni e proporzioni naturali. Se i piedi nudi sono visibili, ognuno ha cinque dita distinte; gambe e caviglie sono collegate naturalmente.",
+  PT:"Se as mãos estiverem visíveis, cada uma terá quatro dedos distintos e um polegar, com articulações e proporções naturais. Se os pés descalços estiverem visíveis, cada um terá cinco dedos distintos; pernas e tornozelos ligam-se naturalmente.",
+  PL:"Jeśli dłonie są widoczne, każda ma cztery oddzielne palce i jeden kciuk, z naturalnymi stawami i proporcjami. Jeśli bose stopy są widoczne, każda ma pięć oddzielnych palców; nogi i kostki łączą się naturalnie."
+};
+const anatomyNegative = {
+  EN:"extra or missing fingers, extra or missing thumbs, fused fingers, duplicated hands, extra arms, extra legs, malformed feet, extra or missing toes",
+  HU:"többlet- vagy hiányzó kézujjak, többlet- vagy hiányzó hüvelykujj, összenőtt ujjak, duplikált kezek, többletkarok, többletlábak, torz lábfejek, többlet- vagy hiányzó lábujjak",
+  DE:"zusätzliche oder fehlende Finger, zusätzliche oder fehlende Daumen, verwachsene Finger, doppelte Hände, zusätzliche Arme oder Beine, verformte Füße, zusätzliche oder fehlende Zehen",
+  FR:"doigts supplémentaires ou manquants, pouces supplémentaires ou manquants, doigts fusionnés, mains dupliquées, bras ou jambes supplémentaires, pieds déformés, orteils supplémentaires ou manquants",
+  ES:"dedos adicionales o ausentes, pulgares adicionales o ausentes, dedos fusionados, manos duplicadas, brazos o piernas adicionales, pies deformados, dedos de los pies adicionales o ausentes",
+  IT:"dita aggiuntive o mancanti, pollici aggiuntivi o mancanti, dita fuse, mani duplicate, braccia o gambe aggiuntive, piedi deformati, dita dei piedi aggiuntive o mancanti",
+  PT:"dedos a mais ou em falta, polegares a mais ou em falta, dedos fundidos, mãos duplicadas, braços ou pernas extra, pés deformados, dedos dos pés a mais ou em falta",
+  PL:"dodatkowe lub brakujące palce dłoni, dodatkowe lub brakujące kciuki, zrośnięte palce, zdublowane dłonie, dodatkowe ręce lub nogi, zniekształcone stopy, dodatkowe lub brakujące palce stóp"
+};
+
+export function anatomyGuidance(state) {
+  const language = languages.includes(state.outputLanguage) ? state.outputLanguage : "EN";
+  const text = [state.brief,state.subject,state.action].join(" ");
+  if (state.mode !== "image" || state.anatomy === false || !humanSubject.test(text)) return {positive:"",negative:""};
+  return {positive:anatomyPositive[language],negative:state.model === "flux" ? "" : anatomyNegative[language]};
+}
+
 export function buildPrompt(state) {
   const language = languages.includes(state.outputLanguage) ? state.outputLanguage : "EN";
   const labels = headings[language];
   const words = phrases[language];
+  const anatomy = anatomyGuidance(state);
   const line = (index, value) => value ? labels[index] + ": " + value.trim() : "";
   const resolution = recommendResolution(state);
   const summary = String(state.brief || "").trim();
@@ -451,6 +481,7 @@ export function buildPrompt(state) {
     line(7, mood)
   ];
   if (state.customDirections) lines.push(`${customHeadings[language]}: ${String(state.customDirections).trim()}`);
+  if (anatomy.positive) lines.push(anatomy.positive);
   if (state.mode === "video") {
     const seconds = Number(state.duration) || 8;
     lines.push(line(8, String(seconds) + " s · " + words.continuous));
@@ -464,5 +495,7 @@ export function buildPrompt(state) {
     lines.push(line(8, String(resolution.width) + " × " + String(resolution.height)
       + " px · " + (ui[language][resolution.frame] || resolution.frame)));
   }
+  const negatives = [String(state.negatives || "").trim(),anatomy.negative].filter(Boolean).join(", ");
+  lines.push(line(11, negatives));
   return lines.filter(Boolean).join("\n");
 }

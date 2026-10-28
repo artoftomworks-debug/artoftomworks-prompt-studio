@@ -1,0 +1,6 @@
+# Keep source/build inputs stable on Windows and in GitHub Actions.
+* text eol=lf
+# Preserve the packaged Windows scripts and existing workflow JSON byte-for-byte.
+*.ps1 -text diff whitespace=cr-at-eol
+*.cmd -text diff whitespace=cr-at-eol
+*.json -text diff whitespace=cr-at-eol

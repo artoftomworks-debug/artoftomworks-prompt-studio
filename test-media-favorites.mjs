@@ -20,6 +20,7 @@ try {
   await mkdir(dataFolder);
   await mkdir(join(folder,"dist"));
   await copyFile(new URL("./media-catalog.mjs",import.meta.url),modulePath);
+  await copyFile(new URL("./cleanup-advisor.mjs",import.meta.url),join(folder,"cleanup-advisor.mjs"));
   await copyFile(new URL("./dist/sentence-bank.mjs",import.meta.url),join(folder,"dist","sentence-bank.mjs"));
   await copyFile(new URL("./dist/translation-glossary.mjs",import.meta.url),glossaryPath);
   await writeFile(indexPath,gzipSync(Buffer.from(JSON.stringify({roots:[mediaFolder],scannedAt:null,items:[],scanned:0,skipped:0,errors:0}))));
@@ -55,7 +56,7 @@ try {
   assert.deepEqual(JSON.parse(await readFile(labelsPath,"utf8")).items,{});
   console.log("Media ratings, custom categories, filtering, rescan and restart checks passed.");
 } finally {
-  for (const path of [imagePath,sidecarPath,indexPath,labelsPath,labelsBackupPath,modulePath,glossaryPath,join(folder,"dist","sentence-bank.mjs")]) {
+  for (const path of [imagePath,sidecarPath,indexPath,labelsPath,labelsBackupPath,modulePath,join(folder,"cleanup-advisor.mjs"),glossaryPath,join(folder,"dist","sentence-bank.mjs")]) {
     try { await unlink(path); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   await rmdir(mediaFolder);

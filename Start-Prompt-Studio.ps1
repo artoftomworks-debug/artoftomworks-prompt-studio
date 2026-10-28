@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSCommandPath
 $localNode = Join-Path $project 'runtime\node.exe'
 $serverFile = Join-Path $project 'local-server.mjs'
@@ -34,7 +34,7 @@ try {
 
   New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
   $health = Get-Local ($url + 'health')
-  if ($health -and ($health.globalClean -ne $true -or $health.version -ne '1.19' -or $health.archiveHandoff -ne $true -or $health.videoThumbnails -ne $true -or $health.abCompare -ne $true -or $health.recipeCopy -ne $true -or $health.glossarySuggestions -ne $true -or $health.addonAdvisor -ne $true)) {
+  if ($health -and ($health.globalClean -ne $true -or $health.version -ne '1.20.0' -or $health.archiveHandoff -ne $true -or $health.videoThumbnails -ne $true -or $health.abCompare -ne $true -or $health.recipeCopy -ne $true -or $health.glossarySuggestions -ne $true -or $health.addonAdvisor -ne $true)) {
     throw 'Port 18819 belongs to another or older application. Close it before starting this clean edition.'
   }
   if (-not $health) {
@@ -45,7 +45,7 @@ try {
       if ($health) { break }
     }
   }
-  if (-not $health -or $health.globalClean -ne $true -or $health.version -ne '1.19' -or $health.mediaFavorites -ne $true -or $health.directorTimeline -ne $true -or $health.archiveHandoff -ne $true -or $health.videoThumbnails -ne $true -or $health.abCompare -ne $true -or $health.recipeCopy -ne $true -or $health.glossarySuggestions -ne $true -or $health.addonAdvisor -ne $true) {
+  if (-not $health -or $health.globalClean -ne $true -or $health.version -ne '1.20.0' -or $health.mediaFavorites -ne $true -or $health.directorTimeline -ne $true -or $health.archiveHandoff -ne $true -or $health.videoThumbnails -ne $true -or $health.abCompare -ne $true -or $health.recipeCopy -ne $true -or $health.glossarySuggestions -ne $true -or $health.addonAdvisor -ne $true) {
     throw 'The local page did not start. See data\logs\server.stderr.log.'
   }
 
@@ -62,12 +62,12 @@ try {
     }
   }
   if (-not $ollama) { Write-Host 'Local AI is optional and not active. The media archive and manual prompt tools still work.' }
-  elseif (-not @($ollama.models | Where-Object { $_.name -eq 'gemma3:4b' -or $_.name -eq 'gemma3:latest' }).Count) {
-    Write-Host 'For AI suggestions and translation, download the optional model with: ollama pull gemma3:4b'
+  elseif (-not @($ollama.models).Count) {
+    Write-Host 'No local models are installed. See LOCAL_AI_GUIDE.md for optional setup; choose a vision-capable model for images.'
   }
 
   Start-Process $url
-  Write-Host "Prompt Studio Global 1.19 is ready: $url"
+  Write-Host "Prompt Studio Global 1.20.0 is ready: $url"
   exit 0
 } catch {
   Write-Host ('START ERROR: ' + $_.Exception.Message) -ForegroundColor Red

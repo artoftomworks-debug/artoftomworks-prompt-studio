@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
+import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, open, stat, lstat, realpath, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -7,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { extractGlossaryCandidates } from "./dist/translation-glossary.mjs";
 import { collectSentenceCandidates } from "./dist/sentence-bank.mjs";
+import { inspectCleanup } from "./cleanup-advisor.mjs";
 
 const defaults = [];
 const storagePath = new URL("./data/media-catalog-index.json.gz", import.meta.url);
@@ -25,6 +27,129 @@ let deleting = false;
 let labels = { version:1, categories:[...defaultCategories], items:{} };
 let labelWrites = Promise.resolve();
 let labelsRecovered = false;
+let cleanupState = { running:false, checked:0, total:0, hashed:0, hashTotal:0, skippedRecent:0,
+  skippedChanged:0, unreadable:0, suspectCount:0, duplicateGroups:0, duplicateExtras:0,
+  finishedAt:null, message:"" };
+let cleanupCandidates = [];
+let cleanupStop = false;
+let cleanupReview = null;
+let cleanupGeneration = 0;
+
+function clearCleanup() {
+  cleanupGeneration++;
+  cleanupReview = null;
+  cleanupCandidates = [];
+  cleanupState = { running:false, checked:0, total:0, hashed:0, hashTotal:0, skippedRecent:0,
+    skippedChanged:0, unreadable:0, suspectCount:0, duplicateGroups:0, duplicateExtras:0,
+    finishedAt:null, message:"" };
+}
+
+function removeCleanupCandidate(id) {
+  if (!cleanupCandidates.some((candidate) => candidate.id === id)) return;
+  cleanupGeneration++;
+  cleanupReview = null;
+  cleanupCandidates = cleanupCandidates.filter((candidate) => candidate.id !== id);
+  const groups = new Map();
+  for (const candidate of cleanupCandidates) {
+    if (candidate.type !== "duplicate") continue;
+    const members = groups.get(candidate.group) || [];
+    members.push(candidate); groups.set(candidate.group,members);
+  }
+  cleanupCandidates = cleanupCandidates.filter((candidate) =>
+    candidate.type !== "duplicate" || (groups.get(candidate.group)?.length || 0) >= 2);
+  for (const candidate of cleanupCandidates) {
+    if (candidate.type === "duplicate") candidate.groupSize = groups.get(candidate.group).length;
+  }
+  cleanupState.suspectCount = cleanupCandidates.filter((candidate) => candidate.type === "suspect").length;
+  cleanupState.duplicateGroups = [...groups.values()].filter((members) => members.length >= 2).length;
+  cleanupState.duplicateExtras = [...groups.values()].reduce((sum,members) =>
+    sum + Math.max(0,members.length-1),0);
+}
+
+export function catalogCleanupStatus() {
+  return { ...cleanupState, results:cleanupCandidates.length, generation:cleanupGeneration };
+}
+
+export function catalogCleanupResults(page = 0) {
+  const offset = Math.max(0, Math.floor(Number(page) || 0)) * 24;
+  const results = cleanupCandidates.slice(offset, offset + 24).map((candidate) => {
+    const item = catalogItem(candidate.id);
+    return item ? { ...candidate, item:{ ...item, ...annotationFor(item.id) } } : null;
+  }).filter(Boolean);
+  return { total:cleanupCandidates.length, page:Math.floor(offset / 24), results };
+}
+
+function rankDuplicateGroup(entries, keep) {
+  const ranked = entries.map(candidate => ({ candidate, item:catalogItem(candidate.id) }))
+    .filter(entry => entry.item);
+  ranked.sort((a,b) => {
+    const aTime=Date.parse(a.item.modified),bTime=Date.parse(b.item.modified);
+    if (keep === "rating") {
+      const byRating=(annotationFor(b.item.id).rating || 0)-(annotationFor(a.item.id).rating || 0);
+      if (byRating) return byRating;
+    }
+    const byDate=keep === "newest" ? bTime-aTime : aTime-bTime;
+    return byDate || a.item.path.localeCompare(b.item.path);
+  });
+  return ranked;
+}
+
+export function catalogCleanupAutoSelection(keep = "rating") {
+  if (cleanupState.running || !cleanupState.finishedAt || cleanupState.message) {
+    throw new Error("Finish a cleanup check first");
+  }
+  if (!["rating","oldest","newest"].includes(keep)) throw new Error("Choose a keep rule");
+  const groups = new Map();
+  for (const candidate of cleanupCandidates) {
+    if (candidate.type !== "duplicate") continue;
+    const entries = groups.get(candidate.group) || [];
+    entries.push(candidate); groups.set(candidate.group,entries);
+  }
+  const extras = [];
+  for (const entries of groups.values()) {
+    const ranked = rankDuplicateGroup(entries,keep);
+    if (ranked.length < 2) continue;
+    extras.push(...ranked.slice(1).map(entry => entry.candidate.id));
+  }
+  return { ids:extras.slice(0,100), totalExtras:extras.length, keep, maximum:100 };
+}
+
+async function runCleanup() {
+  try {
+    const result = await inspectCleanup([...index.items], {
+      verify:(item) => checkedFile(item.path,item.root),
+      shouldStop:() => cleanupStop,
+      onProgress:(progress) => { cleanupState = { ...cleanupState, ...progress }; }
+    });
+    if (result.cancelled) cleanupState.message = "cancelled";
+    else cleanupCandidates = result.candidates;
+  } catch (error) {
+    cleanupCandidates = [];
+    cleanupState.message = String(error.message || error);
+  } finally {
+    cleanupState.running = false;
+    cleanupState.finishedAt = new Date().toISOString();
+  }
+}
+
+export function startCatalogCleanup() {
+  if (cleanupState.running || scanState.running || deleting) return false;
+  clearCleanup();
+  cleanupState.running = true;
+  cleanupState.total = index.items.length;
+  cleanupStop = false;
+  runCleanup().catch((error) => {
+    cleanupState.running = false;
+    cleanupState.message = String(error.message || error);
+  });
+  return true;
+}
+
+export function cancelCatalogCleanup() {
+  if (!cleanupState.running) return false;
+  cleanupStop = true;
+  return true;
+}
 
 export async function loadMediaCatalog() {
   try {
@@ -124,13 +249,14 @@ export async function setCatalogAnnotation(id, changes) {
 }
 
 export async function addCatalogRoot(value) {
-  if (scanState.running || deleting) throw new Error("Wait until the current operation finishes");
+  if (scanState.running || deleting || cleanupState.running) throw new Error("Wait until the current operation finishes");
   const candidate = String(value || "").trim();
   if (!isAbsolute(candidate) || candidate.length > 400) throw new Error("Give an absolute folder path");
   const root = resolve(candidate);
   if (root === parse(root).root || !(await stat(root)).isDirectory()) throw new Error("Choose a folder, not a drive root");
   if (index.roots.length >= 12 && !index.roots.some((x) => x.toLocaleLowerCase() === root.toLocaleLowerCase())) throw new Error("Maximum 12 folders");
   if (!index.roots.some((x) => x.toLocaleLowerCase() === root.toLocaleLowerCase())) index.roots.push(root);
+  clearCleanup();
   await persist();
   return catalogStatus();
 }
@@ -509,23 +635,35 @@ async function scan() {
     items.sort((a,b) => b.modified.localeCompare(a.modified));
     index = { roots:index.roots, scannedAt:new Date().toISOString(), items, scanned:scanState.scanned,
       skipped:scanState.skipped, errors:scanState.errors };
+    clearCleanup();
     await persist();
   } catch (error) { scanState.message = String(error.message || error); }
   finally { scanState.running = false; }
 }
 
 export function startCatalogScan() {
-  if (scanState.running || deleting) return false;
+  if (scanState.running || deleting || cleanupState.running) return false;
   scan().catch((error) => { scanState.message = String(error); scanState.running = false; });
   return true;
 }
 
-export function searchCatalog({ query="", kind="", root="", prompt="", category="", rating=0, page=0, limit=24 } = {}) {
+function localDateStart(value, extraDays=0) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year,month,day]=value.split("-").map(Number);
+  const date=new Date(year,month-1,day);
+  if (date.getFullYear()!==year || date.getMonth()!==month-1 || date.getDate()!==day) return null;
+  date.setDate(date.getDate()+extraDays);
+  return date.getTime();
+}
+
+export function searchCatalog({ query="", kind="", root="", prompt="", category="", rating=0, dateFrom="", dateTo="", page=0, limit=24 } = {}) {
   const needle = String(query).trim().toLocaleLowerCase().slice(0,200);
   const offset = Math.max(0,Math.floor(Number(page)||0))*Math.min(50,Math.max(1,Number(limit)||24));
   const count = Math.min(50,Math.max(1,Number(limit)||24));
   const minimumRating = Math.max(0,Math.min(5,Math.floor(Number(rating)||0)));
+  const fromTime=localDateStart(dateFrom), untilTime=localDateStart(dateTo,1);
   const matches = index.items.filter((item) => (!kind || item.kind === kind) && (!root || item.root === root) &&
+    (fromTime===null || Date.parse(item.modified)>=fromTime) && (untilTime===null || Date.parse(item.modified)<untilTime) &&
     (!prompt || (prompt === "yes" ? Boolean(item.prompt) : !item.prompt)) &&
     (!category || annotationFor(item.id).category === category) && annotationFor(item.id).rating >= minimumRating &&
     (!needle || [item.filename,item.prompt,item.model,item.source,item.path,annotationFor(item.id).category].some((x) => x.toLocaleLowerCase().includes(needle))));
@@ -696,6 +834,98 @@ export async function previewCatalogDeletion(id) {
   return buildDeletionPlan(id);
 }
 
+function checkedCleanupIds(ids) {
+  if (cleanupState.running || scanState.running || deleting ||
+      !cleanupState.finishedAt || cleanupState.message) {
+    throw new Error("Finish a cleanup check first");
+  }
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 ||
+      ids.some((id) => typeof id !== "string" || !/^[a-f0-9]{24}$/.test(id)) ||
+      new Set(ids).size !== ids.length) {
+    throw new Error("Choose 1 to 100 distinct cleanup results");
+  }
+  const available = new Set(cleanupCandidates.map((candidate) => candidate.id));
+  if (ids.some((id) => !available.has(id))) throw new Error("Cleanup results changed. Run the check again");
+  return new Set(ids);
+}
+
+async function fileDigest(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function checkDuplicateSurvivors(selected, hashContents = true) {
+  const groups = new Map();
+  for (const candidate of cleanupCandidates) {
+    if (candidate.type !== "duplicate" || !selected.has(candidate.id)) continue;
+    const members = cleanupCandidates.filter((entry) => entry.type === "duplicate" &&
+      entry.group === candidate.group);
+    groups.set(candidate.group,members);
+  }
+  for (const [group,members] of groups) {
+    const survivors = members.filter((candidate) => !selected.has(candidate.id));
+    if (!survivors.length) throw new Error("Keep at least one file from every exact-duplicate group");
+    let verified = false;
+    for (const candidate of survivors) {
+      const item = catalogItem(candidate.id);
+      if (!item) continue;
+      try {
+        const details = await checkedFile(item.path,item.root);
+        if (details.size === item.size && details.mtime.toISOString() === item.modified &&
+            (!hashContents || `${details.size}:${await fileDigest(item.path)}` === group)) {
+          verified = true; break;
+        }
+      } catch { /* Try another unselected member of this group. */ }
+    }
+    if (!verified) throw new Error("A duplicate group's remaining copy could not be verified. Run the check again");
+  }
+}
+
+async function deletionSnapshot(plan) {
+  const item = catalogItem(plan.id);
+  if (!item) throw new Error("Catalog item changed");
+  const files = [];
+  for (const file of plan.files) {
+    const details = await checkedFile(file.path,item.root);
+    files.push({ path:file.path, role:file.role, size:details.size,
+      modified:details.mtime.toISOString() });
+  }
+  return JSON.stringify(files);
+}
+
+export async function previewCatalogCleanupBatch(ids, keep = "rating") {
+  cleanupReview = null;
+  const selected = checkedCleanupIds(ids);
+  if (!["rating","oldest","newest"].includes(keep)) throw new Error("Choose a keep rule");
+  const groups = new Map();
+  for (const candidate of cleanupCandidates) {
+    if (candidate.type !== "duplicate") continue;
+    const entries=groups.get(candidate.group) || [];
+    entries.push(candidate); groups.set(candidate.group,entries);
+  }
+  const protectedFiles=[];
+  for (const entries of groups.values()) {
+    if (!entries.every(entry => selected.has(entry.id))) continue;
+    const ranked=rankDuplicateGroup(entries,keep);
+    if (ranked.length !== entries.length) throw new Error("Cleanup results changed. Run the check again");
+    const keeper=ranked[0];
+    selected.delete(keeper.candidate.id);
+    protectedFiles.push({ id:keeper.candidate.id, filename:keeper.item.filename });
+  }
+  await checkDuplicateSurvivors(selected);
+  const plans = [];
+  for (const id of selected) {
+    const plan = await buildDeletionPlan(id);
+    plans.push({ plan, snapshot:await deletionSnapshot(plan) });
+  }
+  const token = randomUUID();
+  cleanupReview = { token, generation:cleanupGeneration, ids:[...selected], plans,
+    expires:Date.now() + 5*60*1000 };
+  return { token, count:plans.length, ids:[...selected], protectedFiles,
+    files:plans.flatMap(({ plan }) => plan.files), keepOnePerDuplicateGroup:true };
+}
+
 async function recycleFile(path) {
   if (process.platform !== "win32") throw new Error("Recycle Bin is available only on Windows");
   const command = "$ErrorActionPreference='Stop'; Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:PROMPT_STUDIO_DELETE_TARGET, [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin, [Microsoft.VisualBasic.FileIO.UICancelOption]::ThrowException)";
@@ -704,31 +934,72 @@ async function recycleFile(path) {
   });
 }
 
+async function removeCatalogPlan(plan,mode) {
+  const remove = mode === "trash" ? recycleFile : unlink;
+  await remove(plan.files[0].path);
+  let warning = "";
+  for (const companion of plan.files.slice(1)) {
+    try { await remove(companion.path); }
+    catch (error) { warning = `Media removed, but companion metadata remains: ${error.message}`; }
+  }
+  const item = catalogItem(plan.id);
+  index.items = index.items.filter((entry) => entry.id !== plan.id);
+  if (labels.items[plan.id]) {
+    delete labels.items[plan.id];
+    try { await persistLabels(); }
+    catch (error) { warning = `${warning} Media removed, but rating/category could not be saved: ${error.message}`.trim(); }
+  }
+  index.scanned = Math.max(0,index.scanned-1);
+  if (item && !item.prompt) index.skipped = Math.max(0,index.skipped-1);
+  try { await persist(); }
+  catch (error) { warning = `${warning} Catalog index could not be saved; refresh it. ${error.message}`.trim(); }
+  removeCleanupCandidate(plan.id);
+  return warning;
+}
+
 export async function deleteCatalogItem(id, mode) {
   if (mode !== "trash" && mode !== "permanent") throw new Error("Choose Recycle Bin or permanent deletion");
-  if (scanState.running || deleting) throw new Error("Wait until the current operation finishes");
+  if (scanState.running || deleting || cleanupState.running) throw new Error("Wait until the current operation finishes");
   deleting = true;
   try {
-    // Revalidate after the UI preview, before changing anything on disk.
     const plan = await buildDeletionPlan(id);
-    const remove = mode === "trash" ? recycleFile : unlink;
-    await remove(plan.files[0].path);
-    let warning = "";
-    for (const companion of plan.files.slice(1)) {
-      try { await remove(companion.path); }
-      catch (error) { warning = `Media removed, but companion metadata remains: ${error.message}`; }
-    }
-    const item = catalogItem(id);
-    index.items = index.items.filter((entry) => entry.id !== id);
-    if (labels.items[id]) {
-      delete labels.items[id];
-      try { await persistLabels(); }
-      catch (error) { warning = `${warning} Media removed, but rating/category could not be saved: ${error.message}`.trim(); }
-    }
-    index.scanned = Math.max(0,index.scanned-1);
-    if (item && !item.prompt) index.skipped = Math.max(0,index.skipped-1);
-    try { await persist(); }
-    catch (error) { warning = `${warning} Catalog index could not be saved; refresh it. ${error.message}`.trim(); }
+    const warning = await removeCatalogPlan(plan,mode);
     return { mode, files:plan.files, warning };
+  } finally { deleting = false; }
+}
+
+export async function deleteCatalogCleanupBatch(token, mode) {
+  if (mode !== "trash" && mode !== "permanent") throw new Error("Choose Recycle Bin or permanent deletion");
+  if (scanState.running || deleting || cleanupState.running) throw new Error("Wait until the current operation finishes");
+  const review = cleanupReview;
+  if (!review || typeof token !== "string" || token !== review.token ||
+      review.generation !== cleanupGeneration || Date.now() > review.expires) {
+    throw new Error("The deletion review expired. Review the selected files again");
+  }
+  const selected = checkedCleanupIds(review.ids);
+  deleting = true;
+  cleanupReview = null;
+  const deleted = [], warnings = [];
+  let failed = "";
+  try {
+    await checkDuplicateSurvivors(selected);
+    for (const entry of review.plans) {
+      try {
+        const current = await buildDeletionPlan(entry.plan.id);
+        if (await deletionSnapshot(current) !== entry.snapshot) {
+          throw new Error("File changed after the review");
+        }
+        if (cleanupCandidates.some((candidate) => candidate.id === current.id &&
+            candidate.type === "duplicate")) await checkDuplicateSurvivors(selected,false);
+        const warning = await removeCatalogPlan(current,mode);
+        deleted.push(current.id);
+        if (warning) warnings.push(`${current.filename}: ${warning}`);
+      } catch (error) {
+        failed = `${entry.plan.filename}: ${error.message || error}`;
+        break;
+      }
+    }
+    return { mode, requested:review.ids.length, deleted, warnings, failed,
+      rescanRecommended:deleted.length > 0 };
   } finally { deleting = false; }
 }

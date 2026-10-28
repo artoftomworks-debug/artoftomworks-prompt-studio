@@ -1,3 +1,4 @@
+import { attachLocalModelPicker } from "./ai-hub.mjs";
 import { videoProfiles, recommendVideoResolution, validateCustomResolution, parseVideoSuggestions } from "./i2v-engine.mjs";
 import { cameraMotionOptions, cameraMotionInstruction } from "./camera-motion.mjs";
 import { soundEffectOptions, soundEffectsInstruction } from "./sound-effects.mjs";
@@ -43,7 +44,7 @@ const soundCopy = {
 };
 const el = (id) => document.getElementById(id);
 
-export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNegative, onPromptReady, onImageChange }) {
+export function attachImageToVideo({ getImage, imageBase64, getLanguage }) {
   const model = el("i2v-model");
   const idea = el("i2v-idea");
   const duration = el("i2v-duration");
@@ -61,6 +62,7 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNega
   const promptEditor = attachBilingualPromptEditor({ field:prompt, getLanguage });
   const status = el("i2v-status");
   const suggestButton = el("i2v-suggest");
+  const visionPicker=attachLocalModelPicker({before:suggestButton,getLanguage,vision:true,onChange:()=>markStale()});
   let dimensions = null;
   let currentFile = null;
   let aiWarnings = [];
@@ -178,7 +180,6 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNega
       dimensions = null;
       aiWarnings = [];
       promptEditor.clear();
-      onImageChange?.();
       el("i2v-options").replaceChildren();
       el("i2v-suggestions").hidden = true;
       status.textContent = file ? t().ready : t().chooseImage;
@@ -207,7 +208,6 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNega
         button.classList.add("selected");
         const body = capturePlan ? `${suggestion.prompt}\nCapture style: ${capturePlan}.` : suggestion.prompt;
         promptEditor.setPrompt(opening ? `${opening}.\n${body}` : body, "EN");
-        onPromptReady?.();
       });
       target.appendChild(button);
     }
@@ -228,11 +228,8 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNega
     try {
       const localProxy = location.protocol === "http:" && location.hostname === "127.0.0.1" && ["18774", "18775", "18776", "18777", "18778", "18817", "18818", "18819"].includes(location.port);
       const base = localProxy ? location.origin : "http://127.0.0.1:11434";
-      const tagsResponse = await fetch(base + "/api/tags", { signal: controller.signal });
-      if (!tagsResponse.ok) throw new Error("ollama");
-      const tags = await tagsResponse.json();
-      const vision = tags.models?.find((item) => item.name === "gemma3:4b" || item.name === "gemma3:latest");
-      if (!vision) { status.textContent = t().modelMissing; return; }
+      const vision=await visionPicker.getSelected(controller.signal);
+      if (!vision) { status.textContent = visionPicker.message(); return; }
       const image = await imageBase64(file);
       const profile = videoProfiles[model.value] || videoProfiles.other;
       const customCamera = customChoiceText("i2v-camera", "EN");
@@ -284,8 +281,7 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage, getNega
     const selectedWidth = width.value, selectedHeight = height.value;
     const note = `Model/workflow: ${(videoProfiles[model.value] || videoProfiles.other).label}\nSuggested or chosen resolution: ${selectedWidth} × ${selectedHeight}\nDuration: ${duration.value} s\nPrompt language: ${promptEditor.getLanguage()}\n${customChoiceText("i2v-camera", "EN") || cameraMotionInstruction(camera.value, cameraCustom.value, cameraStrength.value)}\n${productionPlan({ production:el("i2v-production").value, device:el("i2v-device").value, stability:el("i2v-stability").value }, "EN", true)}\n${soundEffectsInstruction(selectedSoundEffects(), soundCustom.value)}\n\n`;
     const link = document.createElement("a");
-    const negative = getNegative?.().trim() || "";
-    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + (negative ? `\n\nNegative prompt:\n${negative}` : "") + "\n"], { type: "text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + "\n"], { type: "text/plain;charset=utf-8" }));
     link.href = url;
     link.download = "ArtofTomworks_image_to_video_prompt.txt";
     document.body.appendChild(link);

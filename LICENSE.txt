@@ -1,0 +1,41 @@
+ArtofTomworks Prompt Studio — Free Use and No Resale License 1.0
+Copyright (c) 2026 ArtofTomworks. All rights reserved except as granted below.
+
+1. Permission
+You may use, copy and modify this software, in source or packaged form,
+without a license fee, for personal and commercial purposes. You may use it
+while creating work that you sell. Attribution in your finished creative
+work is not required.
+
+2. Free redistribution
+You may redistribute original or modified copies without charge if you keep
+this license and the copyright notice with every copy. Clearly identify your
+modifications and do not present a modified version as an official release.
+Recipients receive these same permissions and restrictions.
+
+3. No resale of the software
+Without separate written permission from ArtofTomworks, you may not sell,
+sublicense for a fee, rent, or otherwise charge for access to or delivery of
+the software, original or modified, including a ZIP, installer or paid bundle
+containing it. You may not remove this restriction from redistributed copies.
+Charging for independently created artwork, videos, prompts or other creative
+results made using the software is permitted; this is not resale of the software.
+
+4. Separate rights
+This license covers only rights held by ArtofTomworks in this software.
+It does not grant rights in third-party models, media, runtimes, components
+or services. Their respective terms apply. It does not claim ownership of
+your input files or creative results, or grant trademark endorsement rights.
+
+5. Warranty and liability
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE
+COPYRIGHT HOLDER IS NOT LIABLE FOR CLAIMS, DAMAGES OR OTHER LIABILITY ARISING
+FROM USE OF THE SOFTWARE. Nothing in this license excludes rights or liability
+that applicable law does not allow to be excluded.
+
+6. Other permissions
+Uses outside these permissions require separate written permission from
+ArtofTomworks. No additional rights are implied. This is a custom
+source-available license; it is not an OSI-approved open-source license.
