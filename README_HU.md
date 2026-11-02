@@ -1,5 +1,9 @@
 # ArtofTomworks Prompt Studio 1.21.0
 
+## Public Beta 1.21.0
+
+Kész Windows-csomag: az [1.21.0 kiadás](https://github.com/artoftomworks-debug/artoftomworks-prompt-studio/releases/tag/v1.21.0) **Windows ZIP** fájlját töltsd le, csomagold ki teljesen, majd `START.cmd`. A külön ComfyUI-példák a [workflows](workflows/README_HU.md) mappában és a külön workflow-ZIP-ben vannak. A forrásarchívum fejlesztéshez készült.
+
 **Helyi MI első telepítése:** telepítsd és indítsd el az [Ollamát Windowsra](https://ollama.com/download/windows). Új PowerShell-ablakban futtasd: `ollama pull gemma3:4b`, és várd meg a letöltést. A Studiót a `START.cmd` fájllal indítsd, majd a modellválasztónál kattints az **Ellenőrzés újra / ↻** gombra. Az Ollama és a modell külön letöltés; az alap archívum ezek nélkül is használható. Az üres lista mellé konkrét segítség kerül. Részletek: [nyolcnyelvű első indítási útmutató](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md).
 
 Helyben futó Windows-segéd promptíráshoz és saját képeid, videóid kereshető archívumához. **Nem generál képet vagy videót, és nem csak MiniMax H3-hoz használható:** SwarmUI, ComfyUI és más generátorok mellett is dolgozhatsz vele. A kiolvasható adatok a fájlok tényleges tartalmától függnek.

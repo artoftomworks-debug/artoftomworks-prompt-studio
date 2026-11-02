@@ -12,6 +12,6 @@ The Eros files were copied from the locally saved `GOOD` graphs. The DaSiWa file
 
 To use one on another computer, install compatible ComfyUI, the required model files and custom nodes, then import the JSON. Select your own start image, write your own scene prompt, check model selections, duration, FPS and resolution, and only then queue a generation. The Eros and DaSiWa graphs use H3-related models and the ArtofTomworks H3 monitor; the LTX graph uses LTX 2.5 components and the ArtofTomworks LTX monitor. Other required nodes include rgthree, KJNodes and Crystools. A JSON file alone does **not** install any of those dependencies.
 
-No personal image, video, prompt, local absolute path, model weight, or API credential is included in this folder. The `example.png` image name is only a placeholder: choose a real image in ComfyUI before running. Keep this repository private until you separately review whether any part should be shared publicly.
+No personal image, video, prompt, local absolute path, model weight, or API credential is included in this folder. The `example.png` image name is only a placeholder: choose a real image in ComfyUI before running. These workflow backups have been prepared for public sharing; generation models and custom-node packages remain separate. Use each model and dependency under its own terms.
 
 Hungarian instructions: [README_HU.md](README_HU.md).

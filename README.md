@@ -1,5 +1,9 @@
 # ArtofTomworks Prompt Studio 1.21.0
 
+## Public Beta 1.21.0
+
+Ready-to-run Windows package: use the **Windows ZIP** attached to the [1.21.0 release](https://github.com/artoftomworks-debug/artoftomworks-prompt-studio/releases/tag/v1.21.0), extract everything, then run `START.cmd`. Optional ComfyUI examples are in [workflows](workflows/README.md) and in their separate companion ZIP. The source archive is intended for development.
+
 **Give your AI creations a memory — and turn yesterday's result into tomorrow's prompt.**
 
 A local-first Windows companion for prompt writing and a searchable archive of your own images and videos. Works alongside SwarmUI, ComfyUI and other generators. **Prompt Studio does not generate images or videos itself, and it is not tied to MiniMax H3 or any single generation model.** Metadata support varies by file format and the information saved by your generator.
@@ -43,7 +47,7 @@ An explicitly selected **18+ artistic nude / boudoir** category offers non-expli
 
 ## Optional AI assistance
 
-**New image branding tools:** open **Text, logo and watermark ↗** in the Image workshop card. Add draggable text/logos, save a reusable branding profile, or apply visible branding layers to up to 20 images and download one ZIP of new PNG files. See [BRANDING_HU_EN.md](BRANDING_HU_EN.md) for usage, export limits and metadata details. Video overlays are not part of this still-image edition.
+**New image branding tools:** open **Text, logo and watermark ↗** in the Image workshop card. Add draggable text/logos, save a reusable branding profile, or apply visible branding layers to up to 20 images and download one ZIP of new PNG files. See [BRANDING_HU_EN.md](BRANDING_HU_EN.md) for usage, export limits and metadata details. For timed overlays on videos, use the separate Video workshop; see VIDEO_BRANDING_HU_EN.md.
 
 **First installation:** install and start [Ollama for Windows](https://ollama.com/download/windows), open a new PowerShell window, run `ollama pull gemma3:4b`, wait for completion, then start Studio with `START.cmd` and click **Check again / ↻** beside the model selector. Ollama and model files are separate downloads. The setup panel distinguishes an unreachable Ollama, an empty local list, text-only models and unverified image capability. See [the eight-language first-run guide](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md).
 
