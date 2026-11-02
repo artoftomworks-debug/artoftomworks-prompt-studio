@@ -1,3 +1,30 @@
+import {attachLocalAiSetup,localAiSetupState} from "./local-ai-setup.mjs";
+// Local text drafts only: image data never enters browser storage.
+export const AI_DRAFT_KEY="artoftomworks.aiHub.draft.v1";
+export function aiDraftText(value){
+  if(!value || typeof value!=="object")throw Error("draft");
+  const result={};
+  for(const key of ["provider","model","task","question","context","response","duration","target","status"]){
+    if(typeof value[key]!=="string" || value[key].length>(key==="response"?500000: key==="context"||key==="question"?30000:1000))throw Error("draft");
+    result[key]=value[key];
+  }
+  if(!["ollama","chatgpt","copilot","copilot-app","other"].includes(result.provider) || !["improve","explain","soften","image-prompt","image-soften","image-edit","image-video","custom"].includes(result.task))throw Error("draft");
+  result.quality=value.quality!==false;result.pending=value.pending===true;
+  result.scroll=Math.max(0,Math.min(100000,Number(value.scroll)||0));
+  result.responseScroll=Math.max(0,Math.min(100000,Number(value.responseScroll)||0));
+  return result;
+}
+export function readAiDraft(storage){
+  const raw=storage.getItem(AI_DRAFT_KEY);if(!raw)return null;
+  if(raw.length>1200000)throw Error("draft");
+  const data=JSON.parse(raw);if(data.version!==1)throw Error("draft");
+  return {current:aiDraftText(data.current),previous:data.previous?aiDraftText(data.previous):null};
+}
+export function writeAiDraft(storage,current,previous){
+  const raw=JSON.stringify({version:1,current:aiDraftText(current),previous:previous?aiDraftText(previous):null});
+  if(raw.length>1200000)throw Error("draft");storage.setItem(AI_DRAFT_KEY,raw);
+}
+const AI_DRAFT_UI={"EN": ["New request", "Previous state", "Work is kept when you close this panel. Text is saved in this browser; after a page reload, reattach the image.", "Previous state restored.", "Text could not be saved in this browser. Keep this page open and copy important work.", "Start a new request? The current work will be available under Previous state.", "The request was interrupted by a reload or state change. Your text was kept; send it again when ready."], "HU": ["Új kérés", "Előző állapot", "A panel bezárásakor megmarad a munkád. A szöveg ebben a böngészőben mentődik; a lap újratöltése után a képet csatold újra.", "Az előző állapot visszaállítva.", "A szöveget nem sikerült menteni a böngészőben. Tartsd nyitva ezt a lapot, és másold ki a fontos munkát.", "Új kérést kezdesz? A mostani munka az Előző állapot gombbal visszahozható.", "A kérést az újratöltés vagy állapotváltás megszakította. A szöveged megmaradt; ha készen állsz, küldd el újra."], "DE": ["Neue Anfrage", "Vorheriger Stand", "Beim Schließen bleibt die Arbeit erhalten. Text wird in diesem Browser gespeichert; nach Neuladen das Bild erneut anhängen.", "Vorheriger Stand wiederhergestellt.", "Text konnte nicht gespeichert werden. Seite offen lassen und wichtige Arbeit kopieren.", "Neue Anfrage beginnen? Die aktuelle Arbeit bleibt unter Vorheriger Stand verfügbar.", "Die Anfrage wurde durch Neuladen oder Zustandswechsel unterbrochen. Der Text bleibt erhalten; bei Bedarf erneut senden."], "FR": ["Nouvelle demande", "État précédent", "Fermer ce panneau conserve le travail. Le texte est enregistré dans ce navigateur ; après rechargement, joignez à nouveau l’image.", "État précédent restauré.", "Impossible d’enregistrer le texte. Gardez cette page ouverte et copiez votre travail.", "Commencer une nouvelle demande ? Le travail actuel restera dans État précédent.", "La demande a été interrompue par un rechargement ou changement d’état. Le texte est conservé ; renvoyez-le lorsque vous êtes prêt."], "ES": ["Nueva petición", "Estado anterior", "Cerrar el panel conserva el trabajo. El texto se guarda en este navegador; vuelve a adjuntar la imagen tras recargar.", "Estado anterior restaurado.", "No se pudo guardar el texto. Mantén la página abierta y copia tu trabajo.", "¿Empezar otra petición? El trabajo actual quedará en Estado anterior.", "La petición se interrumpió al recargar o cambiar de estado. El texto se conserva; envíalo de nuevo cuando quieras."], "IT": ["Nuova richiesta", "Stato precedente", "Chiudere il pannello conserva il lavoro. Il testo si salva in questo browser; dopo aver ricaricato, allega di nuovo l’immagine.", "Stato precedente ripristinato.", "Impossibile salvare il testo. Tieni aperta la pagina e copia il lavoro importante.", "Iniziare una nuova richiesta? Il lavoro attuale resterà in Stato precedente.", "La richiesta è stata interrotta da un ricaricamento o cambio di stato. Il testo resta; invialo di nuovo quando vuoi."], "PT": ["Novo pedido", "Estado anterior", "Fechar o painel mantém o trabalho. O texto é guardado neste navegador; após recarregar, anexe novamente a imagem.", "Estado anterior restaurado.", "Não foi possível guardar o texto. Mantenha a página aberta e copie o trabalho importante.", "Iniciar novo pedido? O trabalho atual ficará em Estado anterior.", "O pedido foi interrompido ao recarregar ou mudar de estado. O texto foi mantido; envie novamente quando quiser."], "PL": ["Nowe pytanie", "Poprzedni stan", "Zamknięcie panelu zachowuje pracę. Tekst zapisuje się w tej przeglądarce; po przeładowaniu dołącz obraz ponownie.", "Przywrócono poprzedni stan.", "Nie zapisano tekstu. Pozostaw stronę otwartą i skopiuj ważną pracę.", "Rozpocząć nowe pytanie? Obecna praca będzie dostępna w Poprzednim stanie.", "Żądanie przerwano po przeładowaniu lub zmianie stanu. Tekst zachowano; wyślij ponownie, gdy zechcesz."]};
 // Optional AI handoff hub. No text leaves the app until the user clicks.
 const WORDS={
   HU:["Kérdezd az MI-t","MI-segítő","Választott segítő","Helyi Ollama – válasz itt","ChatGPT – másolás és megnyitás","Copilot – másolás és megnyitás","Másik alkalmazás – csak másolás","Helyi modell","Feladat","Prompt javítása","Prompt magyarázata","Saját kérdés","Kérés az MI-hez","Átadandó szöveg","Csak a látható szöveg kerül átadásra, kizárólag gombnyomásra. Webes segítőnél te illeszted be és küldöd el. Az eredeti prompt nem változik.","Helyi válasz kérése","Másolás és megnyitás","Szöveg másolása","Válasz (szerkeszthető)","Válasz másolása","Bezárás","Előbb írj vagy válassz ki egy promptot.","A helyi Ollama nem érhető el.","Nincs helyi modell.","A helyi modell válaszol…","Kész a szerkeszthető válasz. Ellenőrizd.","Nem érkezett használható válasz. A prompt megmaradt.","A szöveg a vágólapon van. Ctrl+V-vel illeszd be; te döntesz az elküldésről.","Nem sikerült másolni. A szöveget kézzel is kijelölheted.","A segítő megnyílt. Ctrl+V-vel illeszd be.","A segítő nem nyílt meg; a szöveg a vágólapon van.","Javasolj világosabb, pontosabb promptot. A fő ötletet tartsd meg; ne találj ki beállításokat.","Magyarázd el közérthetően, mit kér ez a prompt és hol lehet kétértelmű.","Mit szeretnél megtudni erről a szövegről?"],
@@ -85,6 +112,15 @@ export function buildVideoRequest({motion="",context="",language="EN",durationSe
 }
 const MARK_START="[[PROMPT]]",MARK_END="[[/PROMPT]]";
 const PROMPT_MARKED_REQUEST="Respond in the user's language with two parts. First, list 1-4 short bullet points: what you changed and why. Then put only the final usable image/video prompt between [[PROMPT]] and [[/PROMPT]] on separate lines. Do not add prose inside the markers. If an image is attached, use it as a reference for the requested changes; do not claim that you edited the image. Keep the input prompt's language and main idea. Do not invent models, LoRAs, seeds or settings. Do not return JSON.";
+const CUSTOM_PROMPT_FORMAT_REQUEST="Answer the user's actual question and respect their requested output language. If the answer includes a final usable image or video prompt, put only that prompt between [[PROMPT]] and [[/PROMPT]] on separate lines, and keep explanations before or after those markers. Otherwise answer normally; do not invent a prompt or settings. Do not return JSON unless the user requested it.";
+export function buildCustomQuestionRequest(question,context="") {
+  const request=String(question||"").trim(),source=String(context||"").trim();
+  return (source?request+"\n\n"+source:request)+"\n\n"+CUSTOM_PROMPT_FORMAT_REQUEST;
+}
+function trimPromptAfterword(text) {
+  const end=text.search(/\n(?:[ \t]*\n)*(?:[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*\n(?:[ \t]*\n)*)?[ \t]*(?:let me know\b|if you(?:'d| would) like\b|would you like\b|feel free to ask\b|ha szeretn[eé]d\b|sz[oó]lj,? ha\b)/i);
+  return end<0?text:text.slice(0,end).trimEnd();
+}
 export function extractMarkedPrompt(source) {
   const raw=String(source||"").replace(/\r\n?/g,"\n");
   const starts=[...raw.matchAll(/\[{1,2}\s*PROMPT\s*\]{1,2}/gi)];
@@ -115,7 +151,7 @@ export function extractCopyablePrompt(source) {
   if(heading){
     const rest=(heading[1]||"")+raw.slice(heading.index+heading[0].length);
     const stop=rest.search(/\n\s*(?:(?:#{1,4}\s+)|(?:\*\*)?(?:explanation|notes?|why|changes?|tips?|negative prompt|magyar[aá]zat|megjegyz[eé]sek?|v[aá]ltoztat[aá]sok|negatív prompt)(?:\*\*)?\s*[:：])/i);
-    const prompt=cleanPromptEnvelope(stop<0?rest:rest.slice(0,stop));
+    const prompt=cleanPromptEnvelope(trimPromptAfterword(stop<0?rest:rest.slice(0,stop)));
     if(!prompt || /^\s*[-*•]\s/m.test(prompt))return "";
     return prompt;
   }
@@ -125,7 +161,7 @@ export function extractCopyablePrompt(source) {
   // A plain prompt is fine, but prose, lists and refusals must not be silently copied.
   if(/^\s*(?:[-*•]|\d+[.)]|#{1,4})\s/m.test(raw) || /(?:^|\n)\s*(?:explanation|notes?|changes?|negative prompt|magyar[aá]zat|megjegyz[eé]sek?|v[aá]ltoztat[aá]sok|negatív prompt)\s*[:：]/i.test(raw))return "";
   if(/^(?:here(?:'s| is| are)|sure\b|certainly\b|of course\b|sorry\b|i (?:cannot|can't|changed|removed|suggest|have)|as an ai\b|í[mr]e\b|sajnálom\b|nem tudok\b)/i.test(raw))return "";
-  return raw;
+  return trimPromptAfterword(raw);
 }
 export function promptCopyValue(source,start=0,end=0) {
   const raw=String(source||"");
@@ -223,6 +259,7 @@ export async function inspectLocalModelInventory(base="",signal) {
   const response=await fetch(base+"/api/tags",{cache:"no-store",signal:signal||AbortSignal.timeout(10000)});
   if(!response.ok)throw Error("Ollama unavailable");
   const data=await response.json();
+  if(!Array.isArray(data?.models))throw Error("Invalid Ollama model list");
   const inventory=Array.isArray(data.models)?data.models.filter(item=>typeof item?.name==="string"&&!/(?:-cloud|:cloud)$/i.test(item.name)):[];
   let cursor=0;
   await Promise.all(Array.from({length:Math.min(3,inventory.length)},async()=>{
@@ -242,7 +279,8 @@ export function attachLocalModelPicker({before,getLanguage,vision=false,onChange
   button.type="button";button.textContent="↻";hint.setAttribute("role","status");
   label.append(caption,select);wrap.append(label,button,hint);before.before(wrap);
   const key=vision?VISION_STORE:MODEL_STORE;
-  let inventory=[],preferred="",revision=0,offline=false;
+  let inventory=[],preferred="",revision=0,offline=false,loading=true;
+  const setup=attachLocalAiSetup({host:wrap,getLanguage,onRetry:()=>refresh()});
   try{preferred=localStorage.getItem(key)||"";}catch{}
   const labels=()=>VISION_UI[getLanguage()]||VISION_UI.EN;
   function translate(){
@@ -253,15 +291,17 @@ export function attachLocalModelPicker({before,getLanguage,vision=false,onChange
     select.replaceChildren(...eligible.map(item=>new Option(item.name,item.name)));
     select.value=selectLocalModel(eligible.map(item=>item.name),selected||preferred);
     select.disabled=!eligible.length;
-    hint.textContent=offline?base[22]:eligible.length?"":vision?labels()[5]:base[23];
+    const state=localAiSetupState({inventory,vision,offline,loading,capability:imageCapability});
+    hint.textContent=setup.update(state);
+    select.disabled=loading || !eligible.length;
     button.setAttribute("aria-label",base[7]+" ↻");button.title=base[7]+" ↻";
   }
   const base=()=>location.protocol==="http:"&&location.hostname==="127.0.0.1"?location.origin:"http://127.0.0.1:11434";
   async function refresh(){
-    const token=++revision;button.disabled=true;
+    const token=++revision;button.disabled=true;loading=true;translate();
     try{const items=await inspectLocalModelInventory(base());if(token!==revision)return;inventory=items;offline=false;translate();}
     catch{if(token===revision){inventory=[];offline=true;translate();}}
-    finally{if(token===revision)button.disabled=false;}
+    finally{if(token===revision){button.disabled=false;loading=false;translate();}}
   }
   select.addEventListener("change",()=>{preferred=select.value;try{localStorage.setItem(key,preferred);}catch{}onChange();});
   button.addEventListener("click",()=>{void refresh();});
@@ -269,12 +309,19 @@ export function attachLocalModelPicker({before,getLanguage,vision=false,onChange
   translate();void refresh();
   return {async getSelected(signal){
     const chosen=select.value||preferred;
-    const items=await inspectLocalModelInventory(base(),signal);
-    inventory=items;offline=false;translate();
-    const eligible=items.filter(item=>!vision || imageCapability(item)===true);
-    const name=selectLocalModel(eligible.map(item=>item.name),chosen);
-    select.value=name;
-    return eligible.find(item=>item.name===name)||null;
+    const token=++revision;loading=true;button.disabled=true;translate();
+    try{
+      const items=await inspectLocalModelInventory(base(),signal);
+      if(token!==revision)return null;
+      inventory=items;offline=false;loading=false;translate();
+      const eligible=items.filter(item=>!vision || imageCapability(item)===true);
+      const name=selectLocalModel(eligible.map(item=>item.name),chosen);
+      select.value=name;return eligible.find(item=>item.name===name)||null;
+    }catch(error){
+      if(signal?.aborted)throw error;
+      if(token===revision){inventory=[];offline=true;}
+      return null;
+    }finally{if(token===revision){loading=false;button.disabled=false;translate();}}
   },message:()=>hint.textContent};
 }
 
@@ -284,9 +331,12 @@ export function attachAiHub({getLanguage,getCurrent}) {
   document.querySelector(".header-right")?.prepend(button);
   const dialog=document.createElement("dialog"); dialog.id="ai-hub-dialog"; dialog.className="ai-hub-dialog";
   dialog.innerHTML=`<div class="ai-hub-top"><h2 id="ai-hub-title"></h2><button id="ai-hub-close" type="button">×</button></div>
+    <div class="ai-hub-actions"><button id="ai-hub-new-request" type="button"></button><button id="ai-hub-previous-state" type="button" disabled></button></div>
+    <p id="ai-hub-draft-hint"></p><p id="ai-hub-draft-warning" role="status" aria-live="polite"></p>
     <div class="ai-hub-grid"><label><span id="ai-hub-provider-label"></span><select id="ai-hub-provider"><option value="ollama"></option><option value="chatgpt"></option><option value="copilot"></option><option value="copilot-app"></option><option value="other"></option></select></label>
     <label id="ai-hub-model-wrap"><span id="ai-hub-model-label"></span><select id="ai-hub-model"></select><small id="ai-hub-model-hint" role="status" aria-live="polite"></small></label>
     <label><span id="ai-hub-task-label"></span><select id="ai-hub-task"><option value="improve"></option><option value="explain"></option><option value="soften"></option><option value="image-prompt"></option><option value="image-soften"></option><option value="image-edit"></option><option value="image-video"></option><option value="custom"></option></select></label></div>
+    <div id="ai-hub-local-setup"></div>
     <label class="ai-hub-field"><span id="ai-hub-question-label"></span><textarea id="ai-hub-question" rows="3"></textarea></label>
     <label class="ai-hub-field"><span id="ai-hub-context-label"></span><textarea id="ai-hub-context" rows="7" maxlength="16000"></textarea></label>
     <div id="ai-hub-image-area" class="ai-hub-image-area"><input id="ai-hub-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -311,11 +361,32 @@ export function attachAiHub({getLanguage,getCurrent}) {
   const videoDuration=find("video-duration"),videoTarget=find("video-target"),videoQuality=find("video-quality");
   const say=(value)=>{status.textContent=value;};
   try {const saved=localStorage.getItem(STORE); if (["ollama","chatgpt","copilot","copilot-app","other"].includes(saved)) provider.value=saved;} catch {}
-  let preferredVision="",modelInventory=[],modelLoading=false;
+  let preferredVision="",modelInventory=[],modelLoading=false,modelOffline=false;
+  const localSetup=attachLocalAiSetup({host:find("local-setup"),getLanguage,onRetry:()=>loadModels()});
   try { preferredVision=localStorage.getItem(VISION_STORE)||""; } catch {}
   let preferredModel="";
   try { preferredModel=localStorage.getItem(MODEL_STORE)||""; } catch {}
   let controller=null,modelToken=0,imageToken=0,imageBase64="",imageInfo=null;
+  let previousDraft=null,draftTimer=null,hasWork=false,lastTask=task.value||"improve",savedScroll=0;
+  const draftWords=()=>AI_DRAFT_UI[getLanguage()]||AI_DRAFT_UI.EN;
+  function snapshot(){return {pending:!!controller,provider:provider.value,model:model.value||preferredModel,task:task.value,question:question.value,context:context.value,response:response.value,duration:videoDuration.value,target:videoTarget.value,quality:videoQuality.checked,status:status.textContent||"",scroll:dialog.open?(dialog.scrollTop||0):savedScroll,responseScroll:response.scrollTop||0,imageBase64,imageInfo:imageInfo?{...imageInfo}:null,imageName:imageName.textContent||""};}
+  function saveDraft(){
+    clearTimeout(draftTimer);hasWork=true;
+    try{writeAiDraft(localStorage,snapshot(),previousDraft);find("draft-warning").textContent="";}
+    catch{find("draft-warning").textContent=draftWords()[4];}
+    find("previous-state").disabled=!previousDraft;
+  }
+  function scheduleDraft(){hasWork=true;clearTimeout(draftTimer);draftTimer=setTimeout(saveDraft,250);}
+  function checkpoint(override={}){if(hasWork || response.value || context.value || imageBase64)previousDraft={...snapshot(),...override};find("previous-state").disabled=!previousDraft;}
+  function stopRequest(){controller?.abort();controller=null;modelToken++;modelLoading=false;}
+  function applyDraft(draft){
+    stopRequest();clearImage();provider.value=draft.provider;task.value=draft.task;lastTask=task.value;
+    preferredModel=draft.model;preferredVision=draft.model;updateTask(false);question.value=draft.question;context.value=draft.context;response.value=draft.response;
+    videoDuration.value=draft.duration;videoTarget.value=draft.target;videoQuality.checked=draft.quality;
+    imageBase64=draft.imageBase64||"";imageInfo=draft.imageInfo||null;
+    if(imageBase64){imagePreview.src="data:image/jpeg;base64,"+imageBase64;imageName.textContent=draft.imageName||"";imagePreviewWrap.hidden=false;}
+    savedScroll=draft.scroll||0;response.scrollTop=draft.responseScroll||0;hasWork=true;translate();say(draft.pending?draftWords()[6]:draft.status||"");renderModels();
+  }
   const updateProvider=()=>{modelWrap.hidden=provider.value!=="ollama";submit.textContent=provider.value==="ollama"?t()[15]:(URLS[provider.value]||provider.value==="copilot-app")?t()[16]:t()[17];};
   function renderVideoAdvice(){
     const labels=VIDEO_EXTRA_UI[getLanguage()]||VIDEO_EXTRA_UI.EN;
@@ -329,19 +400,20 @@ export function attachAiHub({getLanguage,getCurrent}) {
     lines.push(labels[7],labels[8]);
     find("video-advice-text").textContent=lines.join("\n");
   }
-  const updateTask=()=>{
+  const updateTask=(resetQuestion=true)=>{
     const imageText=IMAGE_UI[getLanguage()]||IMAGE_UI.EN;
     const videoText=VIDEO_UI[getLanguage()]||VIDEO_UI.EN;
-    question.value=task.value==="improve"?t()[31]:task.value==="explain"?t()[32]:task.value==="soften"?SOFTEN_REQUEST:"";
+    if(resetQuestion)question.value=task.value==="improve"?t()[31]:task.value==="explain"?t()[32]:task.value==="soften"?SOFTEN_REQUEST:"";
     question.placeholder=["image-prompt","image-soften"].includes(task.value)?(VISION_UI[getLanguage()]||VISION_UI.EN)[6]:task.value==="image-edit"?imageText[3]:task.value==="image-video"?videoText[1]:t()[33];
     find("draft").hidden=task.value!=="soften";find("soften-note").hidden=task.value!=="soften";
     find("video-options").hidden=task.value!=="image-video";
-    find("copy-prompt").hidden=!["improve","soften","image-prompt","image-soften","image-edit","image-video"].includes(task.value);
+    find("copy-prompt").hidden=!["improve","soften","image-prompt","image-soften","image-edit","image-video","custom"].includes(task.value);
     find("response-label").textContent=task.value==="image-video"?videoText[2]:["improve","soften","image-prompt","image-soften","image-edit"].includes(task.value)?imageText[9]:t()[18];
-    find("copy-prompt").textContent=task.value==="image-video"?videoText[3]:imageText[10];
-    renderVideoAdvice();
+    find("copy-prompt").textContent=task.value==="custom"?(OUTPUT_UI[getLanguage()]||OUTPUT_UI.EN)[1]:task.value==="image-video"?videoText[3]:imageText[10];
+    lastTask=task.value;renderVideoAdvice();
   };
   function translate(){
+    const dw=draftWords();find("new-request").textContent=dw[0];find("previous-state").textContent=dw[1];find("previous-state").disabled=!previousDraft;find("draft-hint").textContent=dw[2];
     const w=t();button.textContent=w[0];find("title").textContent=w[1];
     for(const [id,index] of [["provider-label",2],["model-label",7],["task-label",8],["question-label",12],["context-label",13],["privacy",14],["response-label",18]])find(id).textContent=w[index];
     for(const [value,index] of [["ollama",3],["chatgpt",4],["copilot",5],["other",6]])provider.querySelector(`[value="${value}"]`).textContent=w[index];
@@ -360,20 +432,23 @@ export function attachAiHub({getLanguage,getCurrent}) {
     find("image-pick").textContent=imageText[0];find("image-remove").textContent=imageText[1];find("image-hint").textContent=imageText[4];
     find("privacy").textContent=imageBase64?imageText[4]:w[14];
     find("response-label").textContent=task.value==="image-video"?videoText[2]:["improve","soften","image-prompt","image-soften","image-edit"].includes(task.value)?imageText[9]:w[18];
-    find("copy-prompt").textContent=task.value==="image-video"?videoText[3]:imageText[10];
+    find("copy-prompt").textContent=task.value==="custom"?(OUTPUT_UI[getLanguage()]||OUTPUT_UI.EN)[1]:task.value==="image-video"?videoText[3]:imageText[10];
     find("video-duration-label").textContent=videoExtra[0];find("video-target-label").textContent=videoExtra[1];
     find("video-quality-label").textContent=videoExtra[2];find("video-advice-label").textContent=videoExtra[3];
     renderVideoAdvice();
     find("copy").textContent=w[17];find("copy-response").textContent=output[3];find("close").setAttribute("aria-label",w[20]);updateProvider();renderModels();
   }
   function renderModels(){
+    localSetup.root.hidden=provider.value!=="ollama";
+    const setupState=localAiSetupState({inventory:modelInventory,vision:!!imageBase64,offline:modelOffline,loading:modelLoading,capability:imageCapability});
+    localSetup.update(setupState);
     const labels=VISION_UI[getLanguage()]||VISION_UI.EN;
     const needsImage=!!imageBase64;
     const available=modelInventory.filter(item=>!needsImage || imageCapability(item)===true);
     model.replaceChildren(...available.map(item=>new Option(item.name+" — "+(imageCapability(item)===true?labels[2]:imageCapability(item)===false?labels[3]:labels[4]),item.name)));
     model.value=selectLocalModel(available.map(item=>item.name),needsImage?preferredVision:preferredModel);
     model.disabled=modelLoading || !available.length;
-    find("model-hint").textContent=modelLoading?labels[7]:needsImage&&!available.length?labels[5]:"";
+    find("model-hint").textContent=setupState==="ready"?"":localSetup.text();
     if(provider.value==="ollama" && !controller)submit.disabled=modelLoading || !available.length;
   }
   async function loadModels(){
@@ -381,15 +456,21 @@ export function attachAiHub({getLanguage,getCurrent}) {
     try{
       const inventory=await inspectLocalModelInventory();
       if(token!==modelToken)return;
-      modelInventory=inventory;
-    }catch{if(token===modelToken){modelInventory=[];say(t()[22]);}}
+      modelInventory=inventory;modelOffline=false;
+    }catch{if(token===modelToken){modelInventory=[];modelOffline=true;}}
     finally{if(token===modelToken){modelLoading=false;renderModels();}}
   }
-  function open(text){
-    controller?.abort();controller=null;clearImage();translate();response.value="";say("");
-    videoDuration.value="";videoTarget.value="";videoQuality.checked=true;
-    context.value=String(text??getCurrent?.()?.prompt??"").slice(0,16000);
-    updateTask();renderVideoAdvice();dialog.showModal();if(provider.value==="ollama")void loadModels();
+  function open(text,options={}){
+    const incoming=typeof text==="string" || options.task || typeof options.question==="string";
+    if(incoming){
+      checkpoint();stopRequest();clearImage();task.value=options.task||"improve";lastTask=task.value;
+      context.value=String(text??getCurrent?.()?.prompt??"").slice(0,16000);response.value="";
+      videoDuration.value="";videoTarget.value="";videoQuality.checked=true;updateTask();
+      if(typeof options.question==="string")question.value=options.question.slice(0,12000);
+      savedScroll=0;say("");hasWork=true;
+    }else if(!hasWork){context.value=String(getCurrent?.()?.prompt??"").slice(0,16000);updateTask();hasWork=true;}
+    translate();renderVideoAdvice();if(!dialog.open)dialog.showModal();dialog.scrollTop=savedScroll;
+    saveDraft();if(provider.value==="ollama")void loadModels();
   }
   function clearImage(){
     imageToken++;imageBase64="";imageInfo=null;imageInput.value="";imagePreview.removeAttribute("src");
@@ -401,7 +482,7 @@ export function attachAiHub({getLanguage,getCurrent}) {
   async function loadImage(file){
     const labels=IMAGE_UI[getLanguage()]||IMAGE_UI.EN;
     if(!file || !["image/png","image/jpeg","image/webp"].includes(file.type) || file.size>40_000_000){say(labels[6]);return;}
-    clearImage();const token=++imageToken;submit.disabled=true;say(labels[12]);
+    checkpoint();stopRequest();clearImage();const token=++imageToken;submit.disabled=true;say(labels[12]);
     const url=URL.createObjectURL(file);
     try{
       const picture=await new Promise((resolve,reject)=>{
@@ -427,8 +508,8 @@ export function attachAiHub({getLanguage,getCurrent}) {
       imagePreview.src=data;imageName.textContent=file.name;imagePreviewWrap.hidden=false;
       find("privacy").textContent=labels[4];
       if(task.value==="improve"){task.value="image-prompt";updateTask();}
-      renderVideoAdvice();renderModels();
-      say("");
+      response.value="";renderVideoAdvice();renderModels();
+      say("");saveDraft();
     }catch{if(token===imageToken)say(labels[7]);}
     finally{URL.revokeObjectURL(url);if(token===imageToken)renderModels();}
   }
@@ -453,10 +534,13 @@ export function attachAiHub({getLanguage,getCurrent}) {
     }
     if(["image-prompt","image-soften"].includes(task.value))return buildImagePromptRequest({task:task.value,question:question.value,context:source,language:getLanguage()});
     const request=question.value.trim();if(!request){say(t()[33]);question.focus();return "";}
+    if(task.value==="custom")return buildCustomQuestionRequest(request,source);
     return source?`${request}\n\n${task.value==="soften"?softenPrompt(source):source}`:request;
   }
   async function run(){
+    if(controller)return;
     const text=payload();if(!text)return;
+    checkpoint();saveDraft();
     const fallback=task.value==="soften"?softenPrompt(context.value):"";
     const promptTask=["improve","soften","image-prompt","image-soften","image-edit","image-video"].includes(task.value);
     if(fallback)response.value=MARK_START+"\n"+fallback+"\n"+MARK_END;
@@ -497,33 +581,45 @@ export function attachAiHub({getLanguage,getCurrent}) {
       if(!result.ok)throw Error("chat");
       const data=await result.json(),answer=String(data?.message?.content||"").trim();
       if(!answer || (fallback && /^(?:sorry|i cannot|i can't|i am unable|i'm unable|as an ai|sajnálom|nem tudok)/i.test(answer)))throw Error("unusable");
-      if(controller!==current||!dialog.open)return;
+      if(controller!==current)return;
       response.value=promptTask?formatAiAnswer(answer):answer;
       if(promptTask){
         say(extractCopyablePrompt(response.value)?t()[25]:(IMAGE_UI[getLanguage()]||IMAGE_UI.EN)[11]);
       }else say(t()[25]);
-    }catch{if(controller===current&&dialog.open)say(fallback?(SOFTEN_UI[getLanguage()]||SOFTEN_UI.EN)[3]:t()[26]);}
-    finally{clearTimeout(timeout);if(controller===current){controller=null;renderModels();}}
+    }catch{if(controller===current)say(fallback?(SOFTEN_UI[getLanguage()]||SOFTEN_UI.EN)[3]:t()[26]);}
+    finally{clearTimeout(timeout);if(controller===current){controller=null;renderModels();saveDraft();}}
   }
   button.addEventListener("click",()=>open());
-  document.addEventListener("prompt-studio-ask-ai",event=>{if(event.detail?.task==="improve")task.value="improve";open(event.detail?.text);});
+  document.addEventListener("prompt-studio-ask-ai",event=>{const detail=event.detail||{};open(detail.text,{task:["improve","custom"].includes(detail.task)?detail.task:"improve",question:detail.question});});
   find("close").addEventListener("click",()=>dialog.close());
-  dialog.addEventListener("close",()=>{controller?.abort();controller=null;modelToken++;clearImage();});
+  dialog.addEventListener("close",()=>{saveDraft();});
+  dialog.addEventListener("scroll",()=>{savedScroll=dialog.scrollTop||0;scheduleDraft();});
+  find("new-request").addEventListener("click",()=>{
+    if(!globalThis.confirm(draftWords()[5]))return;
+    checkpoint();stopRequest();clearImage();task.value="custom";lastTask=task.value;context.value="";response.value="";videoDuration.value="";videoTarget.value="";videoQuality.checked=true;updateTask();savedScroll=0;dialog.scrollTop=0;say("");saveDraft();
+  });
+  find("previous-state").addEventListener("click",()=>{
+    if(!previousDraft)return;const restore=previousDraft;previousDraft=snapshot();applyDraft(restore);dialog.scrollTop=savedScroll;say(draftWords()[3]);saveDraft();if(provider.value==="ollama")void loadModels();
+  });
+  for(const field of [question,context,response,videoDuration,videoTarget,videoQuality])field.addEventListener("input",scheduleDraft);
+  for(const field of [provider,model,videoQuality])field.addEventListener("change",scheduleDraft);
+  response.addEventListener("scroll",scheduleDraft);
+  globalThis.addEventListener?.("pagehide",()=>{if(hasWork)saveDraft();});
   model.addEventListener("change",()=>{
     if(imageBase64){preferredVision=model.value;try {localStorage.setItem(VISION_STORE,preferredVision);}catch{}}
     else{preferredModel=model.value;try {localStorage.setItem(MODEL_STORE,preferredModel);}catch{}}
   });
-  provider.addEventListener("change",()=>{try{localStorage.setItem(STORE,provider.value);}catch{}updateProvider();say("");if(provider.value==="ollama")void loadModels();else submit.disabled=false;});
-  task.addEventListener("change",updateTask);
+  provider.addEventListener("change",()=>{try{localStorage.setItem(STORE,provider.value);}catch{}updateProvider();renderModels();say("");if(provider.value==="ollama")void loadModels();else submit.disabled=false;});
+  task.addEventListener("change",()=>{checkpoint({task:lastTask});lastTask=task.value;stopRequest();updateTask();response.value="";saveDraft();});
   videoDuration.addEventListener("input",renderVideoAdvice);
   videoTarget.addEventListener("input",renderVideoAdvice);
   find("draft").addEventListener("click",()=>{
     if(!context.value.trim()){say(t()[21]);return;}
     response.value=MARK_START+"\n"+softenPrompt(context.value)+"\n"+MARK_END;
-    say((SOFTEN_UI[getLanguage()]||SOFTEN_UI.EN)[3]);
+    say((SOFTEN_UI[getLanguage()]||SOFTEN_UI.EN)[3]);saveDraft();
   });
   find("image-pick").addEventListener("click",()=>imageInput.click());
-  find("image-remove").addEventListener("click",()=>{clearImage();say("");});
+  find("image-remove").addEventListener("click",()=>{checkpoint();stopRequest();clearImage();say("");saveDraft();});
   imageInput.addEventListener("change",()=>{void loadImage(imageInput.files?.[0]);});
   imageArea.addEventListener("dragover",event=>{event.preventDefault();imageArea.classList.add("drag-over");});
   imageArea.addEventListener("dragleave",()=>imageArea.classList.remove("drag-over"));
@@ -535,5 +631,8 @@ export function attachAiHub({getLanguage,getCurrent}) {
   find("copy-prompt").addEventListener("click",async()=>{const value=promptCopyValue(response.value,response.selectionStart,response.selectionEnd);if(!value){say((IMAGE_UI[getLanguage()]||IMAGE_UI.EN)[11]);return;}say(await copyText(value)?t()[27]:t()[28]);});
   find("copy-response").addEventListener("click",async()=>{if(response.value.trim())say(await copyText(response.value)?t()[27]:t()[28]);});
   document.getElementById("ui-language")?.addEventListener("change",translate);
-  translate();return{open};
+  translate();
+  try{const saved=readAiDraft(localStorage);if(saved){previousDraft=saved.previous;applyDraft(saved.current);}}
+  catch{find("draft-warning").textContent=draftWords()[4];}
+  return{open};
 }

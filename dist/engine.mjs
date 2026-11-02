@@ -309,6 +309,7 @@ const headings = {
   PT: ["Resumo", "Assunto", "Ação", "Cenário", "Estilo visual", "Câmara", "Luz", "Ambiente", "Técnica", "Som", "Música", "Restrições"],
   PL: ["Podsumowanie", "Temat", "Akcja", "Otoczenie", "Styl wizualny", "Kamera", "Światło", "Nastrój", "Technika", "Dźwięk", "Muzyka", "Ograniczenia"]
 };
+export function promptSectionHeadings(language="EN"){return [...(headings[language]||headings.EN)];}
 
 const phrases = {
   HU: {

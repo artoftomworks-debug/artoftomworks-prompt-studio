@@ -8,6 +8,15 @@
   <title>ArtofTomworks · Prompt Studio</title>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem("artoftomworks.v2.theme")==="black"?"black":"navy"}catch{document.documentElement.dataset.theme="navy"}</script>
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./creative-recipes.css">
+  <link rel="stylesheet" href="./studio-planner.css">
+  <link rel="stylesheet" href="./studio-reference.css">
+  <link rel="stylesheet" href="./reference-large.css">
+  <link rel="stylesheet" href="./series-planner.css">
+  <link rel="stylesheet" href="./feature-updates.css">
+  <link rel="stylesheet" href="./publication-desk.css">
+  <link rel="stylesheet" href="./continue-home.css">
+  <link rel="stylesheet" href="./trial-bench.css">
   <script type="module" src="./app.mjs"></script>
 </head>
 <body>
@@ -20,7 +29,7 @@
         <span class="brand-copy"><strong>ArtofTomworks</strong><small>PROMPT STUDIO</small></span>
       </a>
       <div class="header-right">
-        <span class="edition">IMAGE WORKBENCH GLOBAL <b>1.20.0</b></span>
+        <span class="edition">IMAGE WORKBENCH GLOBAL <b>1.21.0</b></span>
         <label class="compact-select theme-select"><span id="ui-theme-label">Appearance</span>
           <select id="ui-theme" aria-label="Appearance">
             <option value="navy">Dark blue</option><option value="black">Black</option>
@@ -58,7 +67,7 @@
 
     <main class="workspace">
       <section class="form-column" aria-label="Prompt builder">
-        <section class="form-card image-import-card" aria-labelledby="image-import-title">
+        <section id="local-ai-setup-section" class="form-card image-import-card" aria-labelledby="image-import-title">
           <h2 id="image-import-title"><span class="step-number">✦</span><span data-image-i18n="title">Start from an image</span></h2>
           <p class="image-import-intro" data-image-i18n="intro">Drop an image here to recover stored prompt data, or ask a local vision model to suggest a new prompt.</p>
           <div id="image-drop" class="image-drop" role="button" tabindex="0" aria-label="Choose or drop an image">

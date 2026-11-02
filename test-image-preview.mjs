@@ -26,8 +26,19 @@ async function request(method,path,headers={},data) {
 try {
   const health = await request("GET","/health");
   assert.equal(health.status,200);
+  assert.equal((await request('POST','/api/catalog/roots/remove',{},{})).status,403);
+  assert.equal((await request('POST','/api/catalog/roots/remove',{origin:'https://untrusted.example','x-prompt-studio-action':'catalog-root-remove','content-type':'application/json'},{})).status,403);
+  assert.equal((await request('POST','/api/catalog/roots/remove',{origin,'x-prompt-studio-action':'catalog-root-remove','content-type':'application/json'},{})).status,409);
+  assert.equal((await request('POST','/api/catalog/scan/cancel',{},{})).status,403);
+  assert.equal((await request('POST','/api/catalog/scan/cancel',{origin,'x-prompt-studio-action':'catalog-scan-control'},{})).status,200);
+  assert.equal((await request('POST','/api/catalog/roots',{},{})).status,403);
+  for(const route of ['batch-preview','batch-delete']){
+    assert.equal((await request('POST','/api/catalog/'+route,{},{})).status,403);
+    assert.equal((await request('POST','/api/catalog/'+route,{origin:'https://untrusted.example','x-prompt-studio-action':'catalog-'+route,'content-type':'application/json'},{})).status,403);
+    assert.equal((await request('POST','/api/catalog/'+route,{origin,'x-prompt-studio-action':'catalog-'+route,'content-type':'application/json'},{})).status,409);
+  }
   assert.equal(JSON.parse(health.body).imagePreview,true);
-  assert.equal(JSON.parse(health.body).version,"1.20.0");
+  assert.equal(JSON.parse(health.body).version,"1.21.0");
   const catalog=await request("GET","/api/catalog/status");
   assert.equal(catalog.status,200);
   assert.deepEqual(JSON.parse(catalog.body).roots,[]);
@@ -35,7 +46,7 @@ try {
   const page=await request("GET","/");
   assert.equal(page.status,200);
   assert.ok(page.body.includes('<html lang="en">'));
-  assert.ok(page.body.includes('<b>1.20.0</b>'));
+  assert.ok(page.body.includes('<b>1.21.0</b>'));
   const scripts=[...page.body.matchAll(/<script>\s*([\s\S]*?)<\/script>/gu)].map(match=>match[1]);
   assert.ok(scripts.some(source=>source.includes("attachPromptCoach")&&source.includes("promptCopyValue")));
   for(const source of scripts)assert.doesNotThrow(()=>new Script(source));
@@ -51,6 +62,8 @@ try {
     origin,"content-type":"application/json", "x-prompt-studio-action":"open-image"
   },{id:"invalid"});
   assert.equal(missing.status,409);
+  for(const headers of [{},{origin:"https://untrusted.example","content-type":"application/json","x-prompt-studio-action":"reveal-file"},{origin,"content-type":"application/json"}])assert.equal((await request("POST","/api/catalog/reveal-file",headers,{id:"invalid"})).status,403);
+  assert.equal((await request("POST","/api/catalog/reveal-file",{origin,"content-type":"application/json","x-prompt-studio-action":"reveal-file"},{id:"invalid",path:"C:/Windows/explorer.exe"})).status,409);
   const ui = await readFile(new URL("./dist/media-catalog-ui.mjs",import.meta.url),"utf8");
   assert.match(ui,/id="catalog-show-thumbnails" type="checkbox"/);
   assert.match(ui,/if \(el\("catalog-show-thumbnails"\)\.checked\) \{/);

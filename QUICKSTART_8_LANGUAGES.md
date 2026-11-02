@@ -1,5 +1,7 @@
 # Quickstart — 8 languages
 
+First installation / Első telepítés / Ersteinrichtung / Première installation / Primera instalación / Prima installazione / Primeira instalação / Pierwsza instalacja: [step-by-step local AI setup in eight languages](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md).
+
 Version 1.20.0: see README.md / README_HU.md for the complete current guide, automatic refresh, model selection and cleanup. Ollama is optional; image assistance requires a compatible vision model. Some older translation tools still use gemma3:4b. Run GPU generation and local image analysis sequentially. See LOCAL_AI_GUIDE.md.
 
 # Prompt Studio 1.20.0 — Quick start in 8 languages

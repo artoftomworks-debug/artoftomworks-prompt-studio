@@ -1,3 +1,13 @@
+import {attachSoundWorkshop} from "./sound-launcher.mjs";
+import {attachVideoWorkshop} from "./video-launcher.mjs";
+import {attachImageWorkshop} from "./image-workshop-ui.mjs";
+import {attachTrialBench} from "./trial-bench-ui.mjs";
+import {attachContinueHome} from "./continue-home-ui.mjs";
+import {attachPublicationDesk} from "./publication-desk-ui.mjs";
+import {attachFeatureUpdates} from "./feature-updates.mjs";
+import {attachSeriesPlanner} from "./series-planner-ui.mjs";
+import {attachVirtualStudio} from "./studio-planner-ui.mjs";
+import {creativePromptFor,creativeMixSectionFor,splitCreativePrompt,loadCreativeMixSection} from "./prompt-mix-section.mjs";
 import { languages, ui, options, buildPrompt, recommendResolution } from "./engine.mjs";
 import { readImageMetadata } from "./image-metadata.mjs";
 import { attachImageToVideo } from "./i2v-ui.mjs";
@@ -16,6 +26,12 @@ import { attachAddonAdvisor } from "./addon-advisor.mjs";
 import { attachSurprisePrompt } from "./creative-forge.mjs";
 import { attachAiHub, attachLocalModelPicker } from "./ai-hub.mjs";
 import { attachPromptWorkbench } from "./prompt-workbench.mjs";
+import { attachCreativeRecipes, attachCreativeStyleMixers } from "./creative-recipes-ui.mjs";
+import { buildCreatorPassport } from "./creator-passport.mjs";
+let creativeStyleMixers = null;
+let trialBench;
+let publicationDesk = null;
+let creativeOriginPrompt="",creativePromptOrigins=[];
 
 const classicCustomIds = ["style", "lighting", "mood", "camera", "still-shot", "still-angle", "still-lens", "still-medium", "still-camera-model", "still-production", "video-production", "video-device", "video-stability", "still-quality-prefix", "video-quality-prefix"];
 
@@ -452,7 +468,8 @@ function updateResult() {
   document.getElementById("music").parentElement.hidden =
     mode !== "video" || !["music", "custom"].includes(state.sound);
   const pending = pendingTextFields(state);
-  const generatedPrompt = pending.length || translating ? "" : buildPrompt(outputState(state));
+  const renderingState=creativeStyleMixers?.buildState("classic",outputState(state))||outputState(state);
+  let generatedPrompt = pending.length || translating ? "" : buildPrompt(renderingState);
   classicPending = !classicManualEdit && (pending.length > 0 || translating);
   if (generatedPrompt && !classicManualEdit &&
       (generatedPrompt !== lastGeneratedPrompt || state.outputLanguage !== lastGeneratedLanguage)) {
@@ -817,14 +834,15 @@ document.getElementById("reset").addEventListener("click", () => {
 });
 copyButton.addEventListener("click", async () => {
   if (!currentPrompt) return;
+  const fullPrompt = creativePromptFor("classic",currentPrompt,classicEditor.getLanguage());
   let copied = false;
   try {
     if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
-    await navigator.clipboard.writeText(currentPrompt);
+    await navigator.clipboard.writeText(fullPrompt);
     copied = true;
   } catch {
     const helper = document.createElement("textarea");
-    helper.value = currentPrompt;
+    helper.value = fullPrompt;
     helper.style.position = "fixed";
     helper.style.opacity = "0";
     document.body.appendChild(helper);
@@ -839,7 +857,7 @@ copyButton.addEventListener("click", async () => {
 });
 document.getElementById("download").addEventListener("click", () => {
   if (!currentPrompt) return;
-  const blob = new Blob([currentPrompt + "\n"], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([creativePromptFor("classic",currentPrompt,classicEditor.getLanguage()) + "\n"], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -866,13 +884,20 @@ i2iController.translate();
 const savedPromptGetCurrent = () => {
     const editor = mode === "i2v" ? i2vController : mode === "i2i" ? i2iController : classicEditor;
     const modelSelect = document.getElementById(mode === "i2v" ? "i2v-model" : mode === "i2i" ? "i2i-model" : "model");
-    return { mode, prompt:editor.getText(), language:editor.getLanguage(),
+    const scope=mode === "i2v" ? "i2v" : mode === "i2i" ? "i2i" : "classic",scenePrompt=editor.getText(),mixDirection=creativeMixSectionFor(scope,editor.getLanguage());
+    const origins=scenePrompt===creativeOriginPrompt?creativePromptOrigins:[];
+    return { mode, prompt:creativePromptFor(scope,scenePrompt,editor.getLanguage()),scenePrompt,mixDirection, language:editor.getLanguage(),origins:mixDirection?[...origins.filter(x=>x.role!=="style-mix"),{role:"style-mix",title:mixDirection,sourceId:"",filename:"",model:""}]:origins,
       negative:(mode === "image" || mode === "video") ? document.getElementById("negatives").value : "",
       model:modelSelect?.selectedOptions?.[0]?.textContent?.trim() || "" };
   };
 attachAiHub({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent });
 attachPromptWorkbench({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent });
 const savedPromptRestore = (entry) => {
+    const scope=entry.mode==="i2v"?"i2v":entry.mode==="i2i"?"i2i":"classic",parts=splitCreativePrompt(entry.prompt);
+    const section=typeof entry.mixDirection==="string"?entry.mixDirection:parts.direction;
+    const scene=typeof entry.scenePrompt==="string"?entry.scenePrompt:parts.scene;
+    if((section||typeof entry.mixDirection==="string")&&loadCreativeMixSection(scope,section))entry={...entry,prompt:scene};
+    creativeOriginPrompt=String(entry.prompt||"");creativePromptOrigins=Array.isArray(entry.origins)?entry.origins:[];
     setMode(entry.mode, { carry:false });
     if (entry.negative !== undefined && (entry.mode === "image" || entry.mode === "video"))
       document.getElementById("negatives").value = String(entry.negative);
@@ -885,8 +910,35 @@ const savedPromptRestore = (entry) => {
       updateResult();
     }
   };
+const creativeRecipes = attachCreativeRecipes({getLanguage:()=>uiLanguage.value,getCurrent:savedPromptGetCurrent,restore:savedPromptRestore,buildPassport:buildCreatorPassport});
+creativeStyleMixers = attachCreativeStyleMixers({getLanguage:()=>uiLanguage.value,
+  onChange:(key)=>{if(key==="classic"){
+    if(mode==="image"){
+      const adapted=creativeStyleMixers?.buildState("classic",readState());
+      if(adapted){
+        for(const [id,value]of [["still-medium",adapted.medium],["style",adapted.style],["still-quality-prefix",adapted.qualityPrefix],["still-capture",adapted.capture],["still-camera-model",adapted.cameraModel],["still-lens",adapted.lens]]){const field=document.getElementById(id);if(field&&Array.from(field.options).some(o=>o.value===value))field.value=value;}
+        renderArtPresetSelector("still",uiLanguage.value);const art=document.getElementById("still-art-style");if(art&&Array.from(art.options).some(o=>o.value===adapted.artStyle))art.value=adapted.artStyle;
+        syncPhotoPresetControls("still",uiLanguage.value);syncArtPresetControls("still",uiLanguage.value);
+      }
+    }
+    updateResult();
+  }},
+  getDraft:(key)=>key==="classic"?classicEditor.getText():key==="surprise"?document.getElementById("surprise-output")?.value||"":key==="i2v"?i2vController.getText():key==="i2i"?i2iController.getText():document.getElementById(key==="recipes"?"creative-recipe-draft":"workbench-draft")?.value||"",
+  getDraftLanguage:(key)=>key==="classic"?classicEditor.getLanguage():key==="i2v"?i2vController.getLanguage():key==="i2i"?i2iController.getLanguage():"EN",
+  setDraft:(key,value,context={})=>{if(key==="classic"){const previousManual=classicManualEdit;classicEditor.setPrompt(value,classicEditor.getLanguage());classicManualEdit=context.mediumReconcile?previousManual:true;updateResult();}else if(key==="surprise"){const field=document.getElementById("surprise-output");if(field)field.value=value;}else if(key==="i2v")i2vController.setPrompt(value,i2vController.getLanguage());else if(key==="i2i")i2iController.setPrompt(value,i2iController.getLanguage());else{const field=document.getElementById(key==="recipes"?"creative-recipe-draft":"workbench-draft");if(field){field.value=value;field.dispatchEvent(new Event("input",{bubbles:true}));}}}
+});
+creativeRecipes?.setMixProvider(()=>creativeStyleMixers?.text("recipes")||creativeStyleMixers?.text("classic")||"");
+attachVirtualStudio({getLanguage:()=>uiLanguage.value,getMode:()=>mode});
+attachImageWorkshop({getLanguage:()=>uiLanguage.value});
+attachVideoWorkshop({getLanguage:()=>uiLanguage.value});
+attachSoundWorkshop({getLanguage:()=>uiLanguage.value});
+const seriesPlannerController = attachSeriesPlanner({getLanguage:()=>uiLanguage.value,getCurrent:savedPromptGetCurrent,restore:savedPromptRestore,onPublish:project=>publicationDesk?.captureSeries(project),getPublicationStatus:project=>publicationDesk?.seriesStatus(project)||"none"});
+publicationDesk = attachPublicationDesk({getLanguage:()=>uiLanguage.value,getCurrent:savedPromptGetCurrent,getSeries:()=>seriesPlannerController?.getState()});
+seriesPlannerController?.refreshPublication();
 attachSurprisePrompt({ getLanguage:() => uiLanguage.value, getMode:() => mode,
-  getCurrent:savedPromptGetCurrent, restore:savedPromptRestore });
+  getCurrent:savedPromptGetCurrent, restore:savedPromptRestore,
+  enhance:(result)=>{result=creativeRecipes?.enhanceSurprise(result)||result;return {...result,prompt:creativeStyleMixers?.reconcile("surprise",result.prompt,"EN").prompt||result.prompt};}
+});
 attachPromptLibrary({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, restore:savedPromptRestore });
 addonAdvisor = attachAddonAdvisor({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, getMode:() => mode });
 promptCoach = attachPromptCoach({ getLanguage:() => uiLanguage.value, getMode:() => mode,
@@ -900,9 +952,22 @@ const directorTimeline = attachDirectorTimeline({ getLanguage:() => uiLanguage.v
     if (savedPromptGetCurrent().prompt?.trim() && !window.confirm(replacePromptCopy[uiLanguage.value] || replacePromptCopy.EN)) return;
     savedPromptRestore({mode:"video",prompt,language:"EN",model:""});
   } });
-attachMediaCatalog({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, restore:savedPromptRestore,
-  onLinkVideo:(item) => directorTimeline.linkMedia(item), getLinkVideoLabel:() => directorTimeline.linkLabel() });
+const mediaCatalog=attachMediaCatalog({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent, restore:savedPromptRestore,
+  onTrialCapture:item=>trialBench?.captureArchive(item),getTrialLabel:()=>trialBench?.labels().viewer||"Attach to trial bench",
+  onPublicationCapture:item=>publicationDesk?.captureArchive(item),getPublicationLabel:()=>publicationDesk?.labels().viewer||"Prepare publication",
+  onLinkVideo:(item) => directorTimeline.linkMedia(item), getLinkVideoLabel:() => directorTimeline.linkLabel(),
+  onCreativeCapture:(item)=>creativeRecipes?.openCapture(item),onCreativeRemix:(item)=>creativeRecipes?.openRemix(item),
+  getCreativeLabels:()=>creativeRecipeLabelsForViewer() });
+function creativeRecipeLabelsForViewer(){return uiLanguage.value==="HU"?{save:"Mentés a beváltak közé",more:"Ebből kérek még"}:creativeRecipes?.labels()||{save:"Save to proven recipes",more:"More like this"};}
 attachCreativeMemory({ getLanguage:() => uiLanguage.value, getCurrent:savedPromptGetCurrent });
+attachContinueHome({getLanguage:()=>uiLanguage.value,setMode,
+  readWorkData:()=>{let series=[],publications=[],trials=[],errors=false;try{trials=trialBench?.list()||[];}catch{errors=true;}try{series=seriesPlannerController?.list()||[];}catch{errors=true;}try{publications=publicationDesk?.list()||[];}catch{errors=true;}return {trials:trials.map(p=>({...p,completed:p.variants.filter(v=>v.decision==="works"&&v.result&&!trialBench.isResultStale(p,v)).length})),series:series.map(project=>({...project,publicationStatus:publicationDesk?.seriesStatus(project,publications)||"none"})),publications,errors};},
+  onResume:(kind,id)=>kind==="trial"?trialBench?.resume(id):kind==="series"?seriesPlannerController?.resume(id):publicationDesk?.resume(id),
+  onSeriesPublication:id=>{if(!seriesPlannerController?.resume(id,{scroll:false}))return false;const existing=publicationDesk?.list().filter(d=>d.seriesId===id).at(-1);return existing?publicationDesk.resume(existing.id):publicationDesk?.captureSeries(seriesPlannerController.getState());}
+});
+trialBench=attachTrialBench({getLanguage:()=>uiLanguage.value,onRecipe:(item,notes)=>creativeRecipes?.openTrialCapture(item,notes),onCompare:(a,b)=>mediaCatalog?.compareIds(a,b)});
+document.dispatchEvent(new CustomEvent("prompt-studio-work-changed",{detail:{}}));
+attachFeatureUpdates({getLanguage:()=>uiLanguage.value});
 
 function workspaceDefaults(prefix) {
   const elements = [...document.querySelectorAll(`#${prefix}-workspace input, #${prefix}-workspace textarea, #${prefix}-workspace select, #${prefix}-result input`)];

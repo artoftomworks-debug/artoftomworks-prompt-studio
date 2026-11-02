@@ -1,3 +1,4 @@
+import {creativePromptFor} from "./prompt-mix-section.mjs";
 import { imageEditProfiles, recommendImageEditResolution, validImageEditResolution, parseImageEditSuggestions } from "./i2i-engine.mjs";
 import { attachBilingualPromptEditor } from "./bilingual-editor.mjs";
 import { imageDirectionPlan, renderImageDirectionSelectors, renderCameraProfileSelector } from "./image-direction.mjs";
@@ -172,10 +173,16 @@ export function attachImageToImage({ getImage, imageBase64, getLanguage }) {
 
   async function copyPrompt() {
     if (!prompt.value.trim()) return;
-    try { await navigator.clipboard.writeText(prompt.value); }
-    catch { prompt.select(); document.execCommand("copy"); }
-    const button = el("i2i-copy"); button.textContent = t().copied;
-    setTimeout(() => { button.textContent = t().copy; }, 1500);
+    const text=creativePromptFor("i2i",prompt.value,promptEditor.getLanguage());
+    let copied=false;
+    try { await navigator.clipboard.writeText(text); copied=true; }
+    catch {
+      const buffer=document.createElement("textarea");buffer.value=text;buffer.style.position="fixed";buffer.style.opacity="0";document.body.append(buffer);buffer.select();
+      try { copied=document.execCommand("copy"); } finally { buffer.remove(); }
+    }
+    if(!copied)return;
+    const button=el("i2i-copy");button.textContent=t().copied;
+    setTimeout(()=>{button.textContent=t().copy;},1500);
   }
 
   function downloadPrompt() {
@@ -184,7 +191,7 @@ export function attachImageToImage({ getImage, imageBase64, getLanguage }) {
     const label = model.value === "other" ? (customModel.value.trim() || imageEditProfiles.other.label) : imageEditProfiles[model.value].label;
     const note = `Model/workflow: ${label}\nSuggested or chosen resolution: ${width.value} × ${height.value}\nReference image: ${getImage()?.name || ""}\nPrompt language: ${promptEditor.getLanguage()}\n\n`;
     const link = document.createElement("a");
-    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + "\n"], { type:"text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([note + creativePromptFor("i2i",prompt.value.trim(),promptEditor.getLanguage()) + "\n"], { type:"text/plain;charset=utf-8" }));
     link.href = url; link.download = "ArtofTomworks_image_to_image_prompt.txt";
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

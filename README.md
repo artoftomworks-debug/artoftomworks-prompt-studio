@@ -1,10 +1,18 @@
-# ArtofTomworks Prompt Studio 1.20.0
+# ArtofTomworks Prompt Studio 1.21.0
 
 **Give your AI creations a memory — and turn yesterday's result into tomorrow's prompt.**
 
 A local-first Windows companion for prompt writing and a searchable archive of your own images and videos. Works alongside SwarmUI, ComfyUI and other generators. **Prompt Studio does not generate images or videos itself, and it is not tied to MiniMax H3 or any single generation model.** Metadata support varies by file format and the information saved by your generator.
 
-[Magyar útmutató](README_HU.md) · [What's new since 1.19](CHANGELOG.md) · [Local AI setup](LOCAL_AI_GUIDE.md) · [Updating an existing installation](UPGRADE.md)
+[Magyar útmutató](README_HU.md) · [Changelog](CHANGELOG.md) · [Local AI setup](LOCAL_AI_GUIDE.md) · [Updating an existing installation](UPGRADE.md)
+
+## New in 1.21.0
+
+Light-sphere and pet posing join the growing visual/audio workspace. Use the mouse wheel to orbit the 3D light-sphere view, Shift + wheel to tilt, Ctrl + wheel to zoom. Dogs and cats have their own quadruped rigs, size choices and editable poses. [Light sphere and pets guide](LIGHT_SPHERE_PETS_HU_EN.md).
+
+The consolidated release also includes the Image, Video and Sound workshops, branding, style/light mixing, reference/body/depth views, local human pose estimation, sound themes and waveform/frame alignment. Editing/exporting existing media is separate from AI image/video generation. [Sound alignment guide](AUDIO_TIMING_HU_EN.md).
+
+**Fresh installation and local AI:** core writing/archive/manual studio tools work without Ollama. Image-understanding prompt suggestions need Ollama and a separately downloaded vision-capable model; an empty model list means setup is still needed. Use the Local AI setup panel and [eight-language first-run guide](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md). Finish GPU image/video generation before starting local vision analysis. Video editing/imported-audio waveform processing needs a configured FFmpeg engine; choose it in Video workshop if automatic detection cannot find one. Ready included WAV samples need no AI model.
 
 ## Start on Windows
 
@@ -34,6 +42,10 @@ Use prompt ideas, the writing guide, styles, glossary, camera/movement suggestio
 An explicitly selected **18+ artistic nude / boudoir** category offers non-explicit adult art ideas. It is excluded from the unrestricted random-theme selection. It does not make local models unrestricted, and it does not generate explicit images. Anatomy wording and negative suggestions cannot guarantee correct hands or anatomy. The effect of negative prompts depends on the generation workflow, particularly for FLUX.
 
 ## Optional AI assistance
+
+**New image branding tools:** open **Text, logo and watermark ↗** in the Image workshop card. Add draggable text/logos, save a reusable branding profile, or apply visible branding layers to up to 20 images and download one ZIP of new PNG files. See [BRANDING_HU_EN.md](BRANDING_HU_EN.md) for usage, export limits and metadata details. Video overlays are not part of this still-image edition.
+
+**First installation:** install and start [Ollama for Windows](https://ollama.com/download/windows), open a new PowerShell window, run `ollama pull gemma3:4b`, wait for completion, then start Studio with `START.cmd` and click **Check again / ↻** beside the model selector. Ollama and model files are separate downloads. The setup panel distinguishes an unreachable Ollama, an empty local list, text-only models and unverified image capability. See [the eight-language first-run guide](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md).
 
 Core writing and archive functions do not need an AI account. Local assistance uses **Ollama**, installed separately; no model weights are included.
 

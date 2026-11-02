@@ -1,3 +1,4 @@
+import {creativePromptFor,creativeMixSectionFor} from "./prompt-mix-section.mjs";
 export const surpriseThemes = ["any","nature","wildlife","portrait","glamour","fantasy","scifi","architecture","abstract","nsfw"];
 
 const seeds = {
@@ -83,6 +84,11 @@ const qualityOpenings={
   artwork:"Masterpiece, carefully crafted fine art, richly detailed, intentional composition, coherent textures suited to the medium",
   video:"Masterpiece, cinematic editorial quality, richly detailed moving image, clear subject focus, coherent natural motion"
 };
+export function generatedSurpriseMedia(){return [
+  {language:"EN",kind:"photo",opening:true,value:qualityOpenings.photograph},
+  {language:"EN",kind:"art",opening:true,value:qualityOpenings.artwork},
+  ...Object.values(seeds).flat().map(seed=>({language:"EN",kind:/photograph/iu.test(seed.medium)?"photo":"art",value:seed.medium}))
+];}
 const handsAndFeet="If hands are visible, each hand has four distinct fingers and one opposable thumb, naturally attached with plausible joints and proportions. If bare feet are visible, each foot has five separate toes; legs and ankles connect naturally.";
 const anatomyExclusions="extra or missing fingers, extra or missing thumbs, fused fingers, duplicated hands, extra arms, extra legs, malformed feet, extra or missing toes";
 
@@ -163,7 +169,7 @@ export function surpriseLayout({width="",height="",framing="auto"}={}) {
   return {valid:true,text:[frame,size].filter(Boolean).join(". "),width:hasSize?w:null,height:hasSize?h:null,framing};
 }
 
-export function attachSurprisePrompt({getLanguage,getMode,getCurrent,restore,onGenerated}) {
+export function attachSurprisePrompt({getLanguage,getMode,getCurrent,restore,onGenerated,enhance}) {
   const el=(id)=>document.getElementById(id),theme=el("surprise-theme"),kind=el("surprise-kind"),output=el("surprise-output"),status=el("surprise-status");
   if(!theme||!kind||!output)return;
   const t=()=>surpriseCopy[getLanguage()]||surpriseCopy.EN;
@@ -210,7 +216,12 @@ export function attachSurprisePrompt({getLanguage,getMode,getCurrent,restore,onG
       result.prompt=layout.text+". "+result.prompt;
       if(framing.value==="full" && el("surprise-model").value!=="flux" && kind.value==="image")result.negative=[result.negative,"cropped head, cropped feet, cropped limbs, close-up"].filter(Boolean).join(", ");
     }
-    lastPrompt=result.prompt;output.value=result.prompt;el("surprise-output-wrap").hidden=false;status.textContent="";
+    if(enhance)result=enhance(result)||result;
+    let origin=el("surprise-provenance");if(!origin){origin=document.createElement("p");origin.id="surprise-provenance";output.after(origin);}
+    origin.textContent=(result.provenance||[]).map(source=>source.title+" · "+(source.filename||"")).join(" | ");
+    origin.hidden=!origin.textContent;
+    lastPrompt=result.prompt;output.value=result.prompt;el("surprise-output-wrap").hidden=false;status.textContent=result.provenanceNotice||"";
+    document.dispatchEvent(new Event("prompt-studio-draft-updated"));
     el("surprise-negative-prompt").value=result.negative;
     el("surprise-negative-wrap").hidden=!result.negative;
     el("surprise-copy-negative").hidden=!result.negative;
@@ -218,13 +229,13 @@ export function attachSurprisePrompt({getLanguage,getMode,getCurrent,restore,onG
     output.focus();output.setSelectionRange(0,0);
   });
   el("surprise-use").addEventListener("click",()=>{
-    const prompt=output.value.trim();if(!prompt)return;
+    const prompt=creativePromptFor("surprise",output.value.trim());if(!prompt)return;
     if(getCurrent()?.prompt?.trim()&&!window.confirm(t().confirm))return;
-    restore({mode:kind.value,prompt,negative:el("surprise-negative-prompt").value.trim(),language:"EN",model:""});status.textContent=t().used;
+    restore({mode:kind.value,prompt,scenePrompt:output.value,mixDirection:creativeMixSectionFor("surprise"),negative:el("surprise-negative-prompt").value.trim(),language:"EN",model:""});status.textContent=t().used;
     document.querySelector(".result-column")?.scrollIntoView({behavior:"smooth",block:"start"});
   });
   el("surprise-copy").addEventListener("click",async()=>{
-    try{await navigator.clipboard.writeText(output.value);status.textContent=t().copied;}
+    try{await navigator.clipboard.writeText(creativePromptFor("surprise",output.value));status.textContent=t().copied;}
     catch{status.textContent=t().copyError;}
   });
   el("surprise-copy-negative").addEventListener("click",async()=>{

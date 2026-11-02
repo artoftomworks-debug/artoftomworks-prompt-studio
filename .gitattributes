@@ -4,3 +4,8 @@
 *.ps1 -text diff whitespace=cr-at-eol
 *.cmd -text diff whitespace=cr-at-eol
 *.json -text diff whitespace=cr-at-eol
+
+*.wasm binary
+*.task binary
+*.wav binary
+*.png binary

@@ -1,3 +1,4 @@
+import {creativePromptFor,creativeMixSectionFor,splitCreativePrompt,loadCreativeMixSection} from "./prompt-mix-section.mjs";
 // The workbench edits a copy. It never writes back to an archive item or source editor.
 const TEXT={
   HU:["Promptműhely","Az eredeti recept érintetlen marad.","Aktuális prompt átvétele","Eredeti","Munkapéldány","Negatív prompt","Lehetséges hibák keresése","Munkapéldány újrakezdése","Javítás MI-vel","Munkapéldány másolása","Eszközök megnyitása","Saját eszköz hozzáadása","Nincs még átvett prompt.","A munkapéldány elkészült.","Nem található egyértelmű ellentmondás; ez nem teljes nyelvi ellenőrzés.","Lehetséges ellentmondások:","A másolat a vágólapon van.","Nem sikerült másolni.","A munkapéldány módosult. Újrakezded az eredetiből?","Nincs másolható prompt.","Eszköz neve","Típus","Helyi vagy webes cím","Windows-program (.exe)","Cím vagy teljes .exe-útvonal","Mentés","Mégse","Beállítás","Megnyitás","Prompt másolása és megnyitás","Eltávolítás","Az eszköz nincs beállítva.","Érvénytelen cím vagy .exe-útvonal.","Az eszköz nem indult el. Ellenőrizd az útvonalat és hogy a helyi Studio fut-e.","A program indítása kérve.","A weboldal nem nyílt meg; ellenőrizd a felugró ablakokat.","Az MI-ablak megnyílt; a munkapéldányod megmaradt.","Legfeljebb 12 saját eszköz adható hozzá.","Eltávolítod ezt az eszközt?","SwarmUI","Stability Matrix","ComfyUI","Lehetséges nemi/pronominális ellentmondás (nő és férfi).","Lehetséges fényviszony-ellentmondás (nappal és éjszaka).","Egyetlen és több szereplő is szerepel.","Gyakori elírás: fireflyes → fireflies.","Ismétlődő promptrészlet. Nézd át, szükséges-e kétszer."],
@@ -37,7 +38,7 @@ export function attachPromptWorkbench({getLanguage,getCurrent}){
   const el=(name)=>root.querySelector("#workbench-"+name);
   const lang=()=>TEXT[getLanguage()]||TEXT.EN;
   const source=el("source"),draft=el("draft"),negative=el("negative"),status=el("status"),issues=el("issues"),toolList=el("tools");
-  let original="",originalNegative="",editing=null;
+  let original="",originalNegative="",originalScene="",originalMix="",editing=null;
   const defaults=()=>presets.map((id,index)=>({id,name:lang()[39+index],kind:"web",target:""}));
   let tools=defaults();
   try {
@@ -58,21 +59,25 @@ export function attachPromptWorkbench({getLanguage,getCurrent}){
     try{await navigator.clipboard.writeText(text);return true;}
     catch{const buffer=document.createElement("textarea");buffer.value=text;buffer.style.position="fixed";buffer.style.opacity="0";document.body.append(buffer);buffer.select();try{return document.execCommand("copy");}finally{buffer.remove();}}
   };
-  const currentText=()=>[draft.value.trim(),negative.value.trim()?"Negative prompt: "+negative.value.trim():""].filter(Boolean).join("\n\n");
-  const applySource=(value,negativeValue="")=>{
+  const currentText=()=>[creativePromptFor("workbench",draft.value.trim()),negative.value.trim()?"Negative prompt: "+negative.value.trim():""].filter(Boolean).join("\n\n");
+  const applySource=(value,negativeValue="",sections=null)=>{
     value=String(value||"").trim();
     if(!value){say(lang()[12]);return;}
-    if(original && (draft.value!==original||negative.value!==originalNegative) && !confirm(lang()[18]))return false;
+    if(original && (draft.value!==originalScene||negative.value!==originalNegative) && !confirm(lang()[18]))return false;
     const parts=value.split(/\n\s*Negative prompt\s*:/i);
     original=parts[0].trim();originalNegative=parts.slice(1).join("Negative prompt:").trim();
     if(!originalNegative)originalNegative=String(negativeValue||"").trim();
-    source.value=original;draft.value=original;negative.value=originalNegative;issues.replaceChildren();say(lang()[13]);
+    const split=splitCreativePrompt(original),mix=typeof sections?.mixDirection==="string"?sections.mixDirection:split.direction;
+    originalScene=original;originalMix="";
+    if((mix||typeof sections?.mixDirection==="string")&&loadCreativeMixSection("workbench",mix)){originalScene=typeof sections?.scenePrompt==="string"?sections.scenePrompt:split.scene;originalMix=mix;}
+    source.value=original;draft.value=originalScene;negative.value=originalNegative;issues.replaceChildren();say(lang()[13]);
+    document.dispatchEvent(new Event("prompt-studio-draft-updated"));
     return true;
   };
   const load=()=>{
     const current=getCurrent?.()||{};
     const negativeValue=["image","video"].includes(current.mode)?document.getElementById("negatives")?.value:"";
-    applySource(current.prompt,negativeValue);
+    applySource(current.prompt,negativeValue,current);
   };
   const check=()=>{
     issues.replaceChildren();
@@ -138,14 +143,16 @@ export function attachPromptWorkbench({getLanguage,getCurrent}){
   };
   el("load").addEventListener("click",load);
   document.addEventListener("prompt-studio-workbench-load",event=>{
-    if(!applySource(event.detail?.prompt,event.detail?.negative)){event.preventDefault();return;}
+    if(!applySource(event.detail?.prompt,event.detail?.negative,event.detail)){event.preventDefault();return;}
     root.scrollIntoView({behavior:"smooth",block:"start"});
   });
   el("check").addEventListener("click",check);
   el("reset").addEventListener("click",()=>{
     if(!original){say(lang()[12]);return;}
-    if((draft.value!==original||negative.value!==originalNegative)&&!confirm(lang()[18]))return;
-    draft.value=original;negative.value=originalNegative;issues.replaceChildren();say(lang()[13]);
+    if((draft.value!==originalScene||negative.value!==originalNegative)&&!confirm(lang()[18]))return;
+    if(originalScene!==original)loadCreativeMixSection("workbench",originalMix);
+    draft.value=originalScene;negative.value=originalNegative;issues.replaceChildren();say(lang()[13]);
+    document.dispatchEvent(new Event("prompt-studio-draft-updated"));
   });
   el("ask-ai").addEventListener("click",()=>{
     const text=currentText();if(!draft.value.trim()){say(lang()[19]);return;}

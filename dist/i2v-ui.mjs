@@ -1,3 +1,4 @@
+import {creativePromptFor} from "./prompt-mix-section.mjs";
 import { attachLocalModelPicker } from "./ai-hub.mjs";
 import { videoProfiles, recommendVideoResolution, validateCustomResolution, parseVideoSuggestions } from "./i2v-engine.mjs";
 import { cameraMotionOptions, cameraMotionInstruction } from "./camera-motion.mjs";
@@ -262,14 +263,16 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage }) {
 
   async function copyPrompt() {
     if (!prompt.value.trim()) return;
-    try { await navigator.clipboard.writeText(prompt.value); }
+    const text=creativePromptFor("i2v",prompt.value,promptEditor.getLanguage());
+    let copied=false;
+    try { await navigator.clipboard.writeText(text); copied=true; }
     catch {
-      prompt.select();
-      document.execCommand("copy");
+      const buffer=document.createElement("textarea");buffer.value=text;buffer.style.position="fixed";buffer.style.opacity="0";document.body.append(buffer);buffer.select();
+      try { copied=document.execCommand("copy"); } finally { buffer.remove(); }
     }
-    const button = el("i2v-copy");
-    button.textContent = t().copied;
-    setTimeout(() => { button.textContent = t().copy; }, 1500);
+    if(!copied)return;
+    const button=el("i2v-copy");button.textContent=t().copied;
+    setTimeout(()=>{button.textContent=t().copy;},1500);
   }
 
   function downloadPrompt() {
@@ -281,7 +284,7 @@ export function attachImageToVideo({ getImage, imageBase64, getLanguage }) {
     const selectedWidth = width.value, selectedHeight = height.value;
     const note = `Model/workflow: ${(videoProfiles[model.value] || videoProfiles.other).label}\nSuggested or chosen resolution: ${selectedWidth} × ${selectedHeight}\nDuration: ${duration.value} s\nPrompt language: ${promptEditor.getLanguage()}\n${customChoiceText("i2v-camera", "EN") || cameraMotionInstruction(camera.value, cameraCustom.value, cameraStrength.value)}\n${productionPlan({ production:el("i2v-production").value, device:el("i2v-device").value, stability:el("i2v-stability").value }, "EN", true)}\n${soundEffectsInstruction(selectedSoundEffects(), soundCustom.value)}\n\n`;
     const link = document.createElement("a");
-    const url = URL.createObjectURL(new Blob([note + prompt.value.trim() + "\n"], { type: "text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([note + creativePromptFor("i2v",prompt.value.trim(),promptEditor.getLanguage()) + "\n"], { type: "text/plain;charset=utf-8" }));
     link.href = url;
     link.download = "ArtofTomworks_image_to_video_prompt.txt";
     document.body.appendChild(link);

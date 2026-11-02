@@ -1,0 +1,28 @@
+PROMPT STUDIO STARTER SOUNDS — VERSION 1.0 — 2026-11-02
+
+These terms cover the 17 WAV files listed in this folder's catalog.json, their original spoken scripts, and the included starter sound arrangements. They do not cover audio imported by a user.
+
+ArtofTomworks grants you a worldwide, non-exclusive, royalty-free permission to:
+- play, download, edit, trim, mix and synchronize these starter sounds;
+- use them in completed personal and commercial audiovisual projects, including films, advertisements, social videos, games and presentations;
+- distribute and monetize those completed projects with the sounds embedded in them.
+
+No attribution or separate payment is required for those uses. Attribution to ArtofTomworks / Prompt Studio is welcome.
+
+You may not sell or redistribute these starter WAV files, modified copies or isolated sound arrangements as a standalone sound library, stock audio product, voice pack or dataset. Redistribution as part of the complete Prompt Studio application is permitted under the application's accompanying licence. No rights are granted in any person's name, identity, trademarks or endorsement.
+
+The narration samples contain original English scripts rendered with synthetic stock voices using Kokoro-82M v1.0. They are examples of general moods, not commissions, impersonations or endorsements of named performers. Ambience, effects and music beds are original procedural synthesis; they are not field recordings. The model, voice vectors and synthesis engine are not bundled or required for playback.
+
+The samples are provided as-is, without a promise that they suit every production. You remain responsible for the context of your finished work and for the rights in other material you import.
+
+Provenance:
+- Kokoro-82M model card (Apache-2.0 weights): https://huggingface.co/hexgrad/Kokoro-82M
+- ONNX synthesis implementation (MIT): https://github.com/thewh1teagle/kokoro-onnx
+- Exact development model/voice-file sources and hashes: PROVENANCE.json
+- Original script, rendered WAV SHA-256, duration and technical details: catalog.json
+
+MAGYAR RÖVID ISMERTETŐ
+
+A 17 beépített mintahangot szabadon vághatod, keverheted és felhasználhatod elkészült személyes és üzleti audiovizuális alkotásokban. Külön fizetés vagy szerzőmegjelölés nem szükséges. Az önálló hangfájlok, hangcsomagok és adathalmazok továbbértékesítése vagy külön továbbadása nem engedélyezett. A teljes alkalmazás részeként a programhoz mellékelt licenc feltételei szerint terjeszthetők.
+
+A narráció saját angol szöveg szintetikus hangon; a többi hang saját eljárásos szintézis, nem helyszíni felvétel. A saját behúzott hangjaidra ez az engedély nem vonatkozik. Az irányadó feltételeket a fenti angol szöveg tartalmazza.

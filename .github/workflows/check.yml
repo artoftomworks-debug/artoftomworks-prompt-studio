@@ -1,0 +1,30 @@
+name: Prompt Studio checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PROMPT_STUDIO_PORT: '0'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: Rebuild workshop pages
+        run: |
+          node build-sound-workshop.mjs
+          node build-video-workshop.mjs
+          node build-offline.mjs
+      - name: Run portable and UI checks
+        shell: pwsh
+        run: |
+          $studioTests = @(Get-ChildItem -Filter 'test-*.mjs' | Where-Object { -not (Select-String -LiteralPath $_.FullName -SimpleMatch -Pattern 'createVideoWorkshopService','PROMPT_STUDIO_TEST_FFMPEG','C:/AIWorks/Data/Packages/ComfyUI' -Quiet) } | ForEach-Object { $_.Name })
+          node --test --test-concurrency=2 @studioTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

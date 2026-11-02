@@ -9,6 +9,11 @@ const uniqueWords = (text, other) => {
 const valueFor = (item,key) => key === "kind" || key === "model" ? item?.[key] : item?.settings?.[key];
 const sameValue = (a,b) => JSON.stringify(a) === JSON.stringify(b);
 
+export function createTrialCatalogBridge({load,isBusy,apply,open,isOpen}){
+ let pending=false;
+ return async(a,b)=>{if(pending||isBusy()||isOpen()||typeof a!=='string'||typeof b!=='string'||!a||!b||a===b||a.length>100||b.length>100)return false;pending=true;try{const pair=await Promise.all([load(a),load(b)]);if(isBusy()||isOpen()||pair[0]?.id!==a||pair[1]?.id!==b)return false;apply(pair[0],pair[1]);await open();return isOpen();}catch{return false;}finally{pending=false;}};
+}
+
 export function compareCatalogItems(a,b) {
   if (!a || !b || a.id === b.id) throw new Error("Choose two distinct archive items");
   const rows = fields.map((key) => {

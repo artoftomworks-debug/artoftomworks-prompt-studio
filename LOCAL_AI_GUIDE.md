@@ -1,5 +1,7 @@
 # Local AI: image understanding and GPU memory
 
+**First installation / Első telepítés:** [Eight-language setup and empty-list troubleshooting](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md). Install and start Ollama separately, download a local vision model, then check the list again. The Studio ZIP does not supply model weights.
+
 Prompt Studio does not generate images or videos. Its optional local assistant uses a separately installed Ollama model for prompt assistance and, when supported by the selected model, image understanding.
 
 **Run local image analysis and GPU-based image/video generation one after the other.** SwarmUI, ComfyUI and Ollama may compete for the same GPU memory. Running them together can exhaust VRAM, cause major slowdowns or errors, and make the computer appear frozen. We have encountered this during concurrent use on our own machine.

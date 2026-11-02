@@ -1,8 +1,12 @@
-# ArtofTomworks Prompt Studio 1.20.0
+# ArtofTomworks Prompt Studio 1.21.0
+
+**Helyi MI első telepítése:** telepítsd és indítsd el az [Ollamát Windowsra](https://ollama.com/download/windows). Új PowerShell-ablakban futtasd: `ollama pull gemma3:4b`, és várd meg a letöltést. A Studiót a `START.cmd` fájllal indítsd, majd a modellválasztónál kattints az **Ellenőrzés újra / ↻** gombra. Az Ollama és a modell külön letöltés; az alap archívum ezek nélkül is használható. Az üres lista mellé konkrét segítség kerül. Részletek: [nyolcnyelvű első indítási útmutató](LOCAL_AI_FIRST_RUN_8_LANGUAGES.md).
 
 Helyben futó Windows-segéd promptíráshoz és saját képeid, videóid kereshető archívumához. **Nem generál képet vagy videót, és nem csak MiniMax H3-hoz használható:** SwarmUI, ComfyUI és más generátorok mellett is dolgozhatsz vele. A kiolvasható adatok a fájlok tényleges tartalmától függnek.
 
 ## Indítás
+
+**Új képes arculatműhely:** a Képműhely kártyán a **Felirat, logó és vízjel ↗** gombbal nyitható. Húzható felirat és logó, menthető arculat és legfeljebb 20 kép kötegelt PNG–ZIP exportja. Részletek és metaadatokra vonatkozó tudnivalók: [BRANDING_HU_EN.md](BRANDING_HU_EN.md). Videóra égetett felirat ebben a képes változatban még nincs.
 
 1. Bontsd ki a teljes ZIP-et egy írható, helyi mappába. Ne a ZIP-ből indítsd.
 2. Indítsd a **START.cmd** fájlt. Node.js 22 vagy újabb szükséges; ha hiányzik, a telepítő felajánl egy hordozható letöltést a nodejs.org-ról, hivatalos SHA-256 ellenőrzéssel.
@@ -44,3 +48,11 @@ A tiszta csomagban nincs személyes média, archívumindex, modell vagy helyi fu
 ## Felhasználás
 
 Az irányadó angol feltételek: [LICENSE.txt](LICENSE.txt). Ingyen használható, módosítható és ingyen továbbadható, fizetős alkotások készítéséhez is. A programot és módosított másolatait külön engedély nélkül nem lehet árulni. Továbbadásnál a szerzői jogi és licencszöveget meg kell tartani; kész alkotásaidnál nem kötelező megnevezned a Studiót. A külső modellek saját feltételeit ez nem írja felül. Egyedi, elérhető forrású licenc, nem OSI szerinti nyílt forrású licenc.
+
+## 1.21.0: fénygömb, háziállatok és összevont műhelyek
+
+Nagy pózszerkesztő: Virtuális stúdió → Figurák és testtartások → Megnyitás új lapon. Fénygömbnél térbeli nézetben görgő = forgatás, Shift + görgő = billentés, Ctrl + görgő = nagyítás. Kutya/macskaváz, három méret és állítható pózok. Részletek: LIGHT_SPHERE_PETS_HU_EN.md.
+
+A teljes kiadás tartalmazza az új képes, videós és hangos műhelyeket, arculatot, témákat, hanghullámot és képkockás hangigazítást is. Minden korábbi helyi frissítő nélkül telepíthető egy új mappába.
+
+Friss gépen a képből promptot ajánló MI-hez külön Ollama és képértő modell szükséges. Üres modelllista esetén: Helyi MI beállítása, majd LOCAL_AI_FIRST_RUN_8_LANGUAGES.md. GPU-s generálás közben ne indíts helyi képértést. A kézi szerkesztők és az archívum Ollama nélkül is használhatók. Videós feldolgozáshoz FFmpeg-motor kell; szükség esetén a Videóműhely motorbeállításánál választható. A kész WAV-mintákhoz nem kell MI.

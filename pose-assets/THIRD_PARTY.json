@@ -1,0 +1,19 @@
+{
+  "runtime": "@mediapipe/tasks-vision 1.2.0",
+  "runtimeSource": "https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-1.2.0.tgz",
+  "runtimeIntegrity": "sha512-7+dr9GbGyTtcuLh11wE5TOn4dNFRncIT9oAWs72620WX99KW5FfzF6rFJ/ChTgXG9vJ6dCiE9FrEEY4CnwPWKQ==",
+  "model": "Pose Landmarker Full float16 version 1",
+  "modelSource": "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+  "modelCard": "https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker#models",
+  "imageUpload": "none; inference in local browser worker",
+  "files": {
+    "LICENSE-MediaPipe.txt": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8",
+    "pose-worker.js": "b60f183003ce1e75f058320f85dc6cc0664d27b923c39af624021ed35c65913e",
+    "pose_landmarker_full.task": "5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1",
+    "vision_bundle.js": "97fc2ec9c4d5d7809274881528b99675c7f4d63d55cddd14988877de2025ac24",
+    "wasm/vision_wasm_internal.js": "85c1a342be70427987f900969a5f26e17557351111364e6585e97fb03e93e108",
+    "wasm/vision_wasm_internal.wasm": "bcc13df22d3d69ec8cbe8e280989356d844ae00f4523eb82072d2484f44134dc",
+    "wasm/vision_wasm_nosimd_internal.js": "e9b2b799e0f1078f5538b300a57835b823742c37e2646308a03f0f25b39fdcdc",
+    "wasm/vision_wasm_nosimd_internal.wasm": "ed5e5e5812490bd90d6a440290845ff9e4c516f696847a28a0c0e0573470d469"
+  }
+}

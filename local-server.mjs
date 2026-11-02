@@ -1,3 +1,7 @@
+import {createSoundWorkshopService} from './sound-workshop-server.mjs';
+import {createPoseAssetHandler} from './pose-assets-server.mjs';
+import {fileURLToPath} from "node:url";
+import {createVideoWorkshopService} from "./video-workshop-server.mjs";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
@@ -6,13 +10,21 @@ import { stat } from "node:fs/promises";
 import { extname, isAbsolute } from "node:path";
 import { launchInstalledCopilot } from "./copilot-launch.mjs";
 import { loadAddonLibrary, addonStatus, addonItems, addAddonRoot, scanAddonLibrary } from "./addon-library.mjs";
-import { loadMediaCatalog, catalogStatus, addCatalogRoot, addCatalogCategory, setCatalogAnnotation, startCatalogScan, searchCatalog, searchCreativeMemory, catalogGlossaryCandidates, catalogSentenceCandidates, catalogItem, catalogSettings, catalogHandoff, openCatalogImage, previewCatalogDeletion, deleteCatalogItem, catalogCleanupStatus, catalogCleanupResults, catalogCleanupAutoSelection, previewCatalogCleanupBatch, deleteCatalogCleanupBatch, startCatalogCleanup, cancelCatalogCleanup } from "./media-catalog.mjs";
+import { loadMediaCatalog, catalogStatus, addCatalogRoot, addCatalogCategory, setCatalogAnnotation, startCatalogScan, searchCatalog, searchCreativeMemory, catalogGlossaryCandidates, catalogSentenceCandidates, catalogItem, catalogSettings, catalogHandoff, openCatalogImage, revealCatalogFile, previewCatalogDeletion, deleteCatalogItem, catalogCleanupStatus, catalogCleanupResults, catalogCleanupAutoSelection, previewCatalogCleanupBatch, deleteCatalogCleanupBatch, startCatalogCleanup, cancelCatalogCleanup } from "./media-catalog.mjs";
+import { previewCatalogBatch, deleteCatalogBatch } from "./media-catalog.mjs";
+import { cancelCatalogScan } from "./media-catalog.mjs";
+import { removeCatalogRoot } from "./media-catalog.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PROMPT_STUDIO_PORT || 18819);
 const ollama = "http://127.0.0.1:11434";
 const page = new URL("./dist/ArtofTomworks_Prompt_Studio_OFFLINE.html", import.meta.url);
 const maxBody = 10_000_000;
+const launcherText=await readFile(new URL("./Start-Prompt-Studio.ps1",import.meta.url),"utf8").catch(()=> "");
+const compatibleVersion=/health\.version\s+-ne\s+['"](\d+(?:\.\d+){1,3})['"]/.exec(launcherText)?.[1]||"1.21.0";
+const poseAssets=createPoseAssetHandler();
+const videoWorkshop = createVideoWorkshopService({root:fileURLToPath(new URL("./data/video-workshop/",import.meta.url))});
+const soundWorkshop=createSoundWorkshopService({root:fileURLToPath(new URL('./data/sound-workshop/',import.meta.url)),samplesRoot:fileURLToPath(new URL('./sound-samples/',import.meta.url)),video:videoWorkshop});
 await loadMediaCatalog();
 await loadAddonLibrary();
 void scanAddonLibrary();
@@ -57,12 +69,22 @@ export const server = createServer(async (req, res) => {
   }
   try {
     const requestUrl = new URL(req.url, origin);
+    if(await poseAssets(req,res,requestUrl))return;
+    if (await soundWorkshop.handle(req,res,requestUrl,origin)) return;
+    if (await videoWorkshop.handle(req,res,requestUrl,origin)) return;
+    if (req.method === "GET" && requestUrl.pathname === "/image-workshop") {
+      send(res,200,await readFile(new URL("./dist/Image_Workshop.html",import.meta.url)),"text/html; charset=utf-8");return;
+    }
+    if(req.method==="GET"&&requestUrl.pathname==="/sound-workshop"){send(res,200,await readFile(new URL("./dist/Sound_Workshop.html",import.meta.url)),"text/html; charset=utf-8");return;}
+    if (req.method === "GET" && requestUrl.pathname === "/video-workshop") {
+      send(res,200,await readFile(new URL("./dist/Video_Workshop.html",import.meta.url)),"text/html; charset=utf-8");return;
+    }
     if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
       send(res, 200, await readFile(page), "text/html; charset=utf-8");
       return;
     }
     if (req.method === "GET" && req.url === "/health") {
-      send(res, 200, JSON.stringify({ ready:true, mediaDeletion:true, mediaFavorites:true, imagePreview:true, videoThumbnails:true, abCompare:true, directorTimeline:true, archiveHandoff:true, recipeCopy:true, glossarySuggestions:true, addonAdvisor:true, cleanupAdvisor:true, cleanupBatch:true, globalClean:true, version:"1.20.0" }));
+      send(res, 200, JSON.stringify({ ready:true, lightSphere:true, petPoses:true, poseEstimation:true, videoWorkshop:true, soundWorkshop:true, mediaDeletion:true, mediaFavorites:true, imagePreview:true, videoThumbnails:true, abCompare:true, directorTimeline:true, archiveHandoff:true, recipeCopy:true, glossarySuggestions:true, addonAdvisor:true, cleanupAdvisor:true, cleanupBatch:true, catalogBatch:true, globalClean:true, version:compatibleVersion }));
       return;
     }
     if (req.method === "POST" && requestUrl.pathname === "/api/ai/launch-copilot") {
@@ -242,6 +264,21 @@ export const server = createServer(async (req, res) => {
       } catch (error) { send(res, 400, JSON.stringify({ error:String(error.message || error) })); }
       return;
     }
+    if (req.method === "POST" && ["/api/catalog/batch-preview", "/api/catalog/batch-delete"].includes(requestUrl.pathname)) {
+      const preview=requestUrl.pathname.endsWith("preview");
+      if (req.headers.origin !== origin ||
+          req.headers["x-prompt-studio-action"] !== (preview ? "catalog-batch-preview" : "catalog-batch-delete") ||
+          !req.headers["content-type"]?.startsWith("application/json")) {
+        send(res, 403, JSON.stringify({error:"Local Prompt Studio only"})); return;
+      }
+      try {
+        const body=await readBody(req);
+        if (body.length>8192) throw new Error("Too many selected files");
+        const input=JSON.parse(body.toString("utf8"));
+        send(res,200,JSON.stringify(preview ? await previewCatalogBatch(input.ids) : await deleteCatalogBatch(input.token,input.mode)));
+      } catch (cause) { send(res,409,JSON.stringify({error:String(cause?.message || cause).slice(0,300)})); }
+      return;
+    }
     if (req.method === "GET" && requestUrl.pathname === "/api/catalog/delete-preview") {
       try { send(res, 200, JSON.stringify(await previewCatalogDeletion(requestUrl.searchParams.get("id") || ""))); }
       catch (error) { send(res, 409, JSON.stringify({ error:String(error.message || error) })); }
@@ -258,6 +295,17 @@ export const server = createServer(async (req, res) => {
       } catch (error) { send(res, 409, JSON.stringify({ error:String(error.message || error) })); }
       return;
     }
+    if (req.method === "POST" && requestUrl.pathname === "/api/catalog/reveal-file") {
+      if (req.headers.origin !== origin || req.headers["x-prompt-studio-action"] !== "reveal-file" ||
+          !req.headers["content-type"]?.startsWith("application/json")) {
+        send(res, 403, JSON.stringify({ error:"Only the local Prompt Studio page may open File Explorer" })); return;
+      }
+      try {
+        const input = JSON.parse((await readBody(req)).toString("utf8"));
+        send(res, 200, JSON.stringify(await revealCatalogFile(input.id)));
+      } catch (error) { send(res, 409, JSON.stringify({ error:String(error.message || error) })); }
+      return;
+    }
     if (req.method === "POST" && requestUrl.pathname === "/api/catalog/delete") {
       if (req.headers.origin !== origin || req.headers["x-prompt-studio-action"] !== "delete-media" ||
           !req.headers["content-type"]?.startsWith("application/json")) {
@@ -269,7 +317,20 @@ export const server = createServer(async (req, res) => {
       } catch (error) { send(res, 409, JSON.stringify({ error:String(error.message || error) })); }
       return;
     }
+    if (req.method === "POST" && requestUrl.pathname === "/api/catalog/roots/remove") {
+      if(req.headers.origin!==origin||req.headers["x-prompt-studio-action"]!=="catalog-root-remove"||!req.headers["content-type"]?.startsWith("application/json")){
+        send(res,403,JSON.stringify({error:"Local Prompt Studio only"}));return;
+      }
+      try{
+        const body=await readBody(req);if(body.length>2048)throw new Error("Invalid folder path");
+        send(res,200,JSON.stringify(await removeCatalogRoot(JSON.parse(body.toString("utf8")).path)));
+      }catch(error){send(res,409,JSON.stringify({error:String(error.message||error).slice(0,300)}));}
+      return;
+    }
     if (req.method === "POST" && requestUrl.pathname === "/api/catalog/roots") {
+      if(req.headers.origin!==origin||req.headers["x-prompt-studio-action"]!=="catalog-root"||!req.headers["content-type"]?.startsWith("application/json")){
+        send(res,403,JSON.stringify({error:"Local Prompt Studio only"}));return;
+      }
       try {
         const input = JSON.parse((await readBody(req)).toString("utf8"));
         send(res, 200, JSON.stringify(await addCatalogRoot(input.path)));
@@ -278,6 +339,12 @@ export const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && requestUrl.pathname === "/api/catalog/scan") {
       send(res, 202, JSON.stringify({ started:startCatalogScan() })); return;
+    }
+    if (req.method === "POST" && requestUrl.pathname === "/api/catalog/scan/cancel") {
+      if(req.headers.origin!==origin||req.headers["x-prompt-studio-action"]!=="catalog-scan-control"){
+        send(res,403,JSON.stringify({error:"Local Prompt Studio only"}));return;
+      }
+      send(res,200,JSON.stringify({cancelled:cancelCatalogScan()}));return;
     }
     if (req.method === "GET" && requestUrl.pathname === "/api/catalog/media") {
       const item = catalogItem(requestUrl.searchParams.get("id") || "");

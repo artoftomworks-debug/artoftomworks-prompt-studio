@@ -1,0 +1,3 @@
+# Testing
+
+Node.js 22+; the packaged build was checked with Node 24 on Windows. Rebuild using build-sound-workshop.mjs, build-video-workshop.mjs, then build-offline.mjs. The GitHub workflow runs portable/UI checks without assuming a preinstalled FFmpeg. Integration tests require a local FFmpeg with libx264/AAC; set PROMPT_STUDIO_TEST_FFMPEG to its absolute executable path. Then run `node --test --test-concurrency=3 "test-*.mjs"`. Tests use isolated temporary media and do not require Ollama or GPU generation. Native browser inference of the bundled MediaPipe worker still needs a user-browser trial; simulated worker tests do not prove browser inference.

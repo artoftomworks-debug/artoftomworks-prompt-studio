@@ -24,7 +24,7 @@ class Element{
  getContext(){return {fillRect(){},drawImage(){}};} toDataURL(){return 'data:image/jpeg;base64,TESTIMAGE';}
 }
 const node=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
-function reset(){nodes=new Map();globalThis.document={createElement:()=>new Element(),getElementById:id=>node('#'+id),querySelector:node,body:new Element(),addEventListener(){}};node('#ai-hub-provider').value='ollama';node('#ai-hub-task').value='improve';}
+function reset(){nodes=new Map();globalThis.document={createElement:()=>new Element(),getElementById:id=>node('#'+id),querySelector:node,body:new Element(),addEventListener(){},dispatchEvent(){return true;}};node('#ai-hub-provider').value='ollama';node('#ai-hub-task').value='improve';}
 globalThis.Option=class{constructor(text,value){this.text=text;this.value=value;}};
 globalThis.localStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)};
 globalThis.location={protocol:'http:',hostname:'127.0.0.1',origin:'http://127.0.0.1:18819'};

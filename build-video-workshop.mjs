@@ -1,0 +1,15 @@
+import {audioTimingCore} from './audio-timing-core.mjs';
+import {audioTimingLabels,audioTimingCss,audioWavePanel,videoAudioAlignmentPanel} from './dist/audio-timing-ui.mjs';
+import {soundHandoffCore} from './sound-workshop-core.mjs';
+import {attachSoundHandoff,soundHandoffLabels} from './dist/sound-handoff-ui.mjs';
+import {imageWorkshopCore,imageWorkshopRenderer} from './dist/image-workshop.mjs';
+import {videoBrandCore} from './video-brand-core.mjs';
+import {videoBrandingPanel,videoBrandingLabels,videoBrandingCss} from './dist/video-branding-ui.mjs';
+import {videoLookCore} from "./video-look-core.mjs";
+import {createFrameSender} from "./dist/frame-bridge.mjs";
+import {writeFileSync} from 'node:fs';
+import {videoWorkshopCore} from './video-workshop-core.mjs';
+import {videoWorkshopLabels,videoWorkshopCss,videoWorkshopApp} from './dist/video-workshop-ui.mjs';
+const script=`const audioTimingCore=${audioTimingCore.toString()};const audioTimingLabels=${audioTimingLabels.toString()};const audioWavePanel=${audioWavePanel.toString()};const videoAudioAlignmentPanel=${videoAudioAlignmentPanel.toString()};const soundHandoffCore=${soundHandoffCore.toString()};const attachSoundHandoff=${attachSoundHandoff.toString()};const soundHandoffLabels=${soundHandoffLabels.toString()};const imageWorkshopCore=${imageWorkshopCore.toString()};const imageWorkshopRenderer=${imageWorkshopRenderer.toString()};const videoBrandCore=${videoBrandCore.toString()};const videoBrandingPanel=${videoBrandingPanel.toString()};const videoBrandingLabels=${videoBrandingLabels.toString()};const videoLookCore=${videoLookCore.toString()};const createFrameSender=${createFrameSender.toString()};const videoWorkshopCore=${videoWorkshopCore.toString()};const videoWorkshopLabels=${videoWorkshopLabels.toString()};(${videoWorkshopApp.toString()})(new URL(location.href).searchParams.get('lang')||'EN',videoWorkshopCore,videoWorkshopLabels,{timingCore:audioTimingCore,timingLabels:audioTimingLabels,wavePanel:audioWavePanel,alignmentPanel:videoAudioAlignmentPanel,lookFactory:videoLookCore,makeSender:createFrameSender,brandPanel:videoBrandingPanel,imageFactory:imageWorkshopCore,rendererFactory:imageWorkshopRenderer,brandFactory:videoBrandCore,brandLabels:videoBrandingLabels,soundHandoffFactory:soundHandoffCore,soundHandoffUI:attachSoundHandoff,soundHandoffLabels:soundHandoffLabels});`;
+writeFileSync(new URL('./dist/Video_Workshop.html',import.meta.url),'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Video workshop</title><style>'+videoWorkshopCss+videoBrandingCss+audioTimingCss+'</style></head><body><script>'+script.replace(/<\/script/gi,'<\\/script')+'</script></body></html>','utf8');
+console.log('Video workshop page built.');

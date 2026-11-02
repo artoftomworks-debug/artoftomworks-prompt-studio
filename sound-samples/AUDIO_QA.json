@@ -1,0 +1,104 @@
+[
+  {
+    "id": "arena-intro-en",
+    "duration": 9.7067,
+    "peak_dbfs": -2.0,
+    "rms_dbfs": -19.16
+  },
+  {
+    "id": "trailer-intro-en",
+    "duration": 13.376,
+    "peak_dbfs": -2.0,
+    "rms_dbfs": -18.59
+  },
+  {
+    "id": "advert-intro-en",
+    "duration": 11.4987,
+    "peak_dbfs": -2.0,
+    "rms_dbfs": -18.0
+  },
+  {
+    "id": "documentary-intro-en",
+    "duration": 14.1867,
+    "peak_dbfs": -2.04,
+    "rms_dbfs": -17.73
+  },
+  {
+    "id": "meditation-intro-en",
+    "duration": 12.2667,
+    "peak_dbfs": -2.08,
+    "rms_dbfs": -18.72
+  },
+  {
+    "id": "scifi-intro-en",
+    "duration": 14.2293,
+    "peak_dbfs": -2.0,
+    "rms_dbfs": -18.85
+  },
+  {
+    "id": "fantasy-intro-en",
+    "duration": 11.1787,
+    "peak_dbfs": -1.93,
+    "rms_dbfs": -20.01
+  },
+  {
+    "id": "rain-window",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -17.49
+  },
+  {
+    "id": "soft-wind",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -18.15
+  },
+  {
+    "id": "quiet-room",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -15.05
+  },
+  {
+    "id": "distant-city",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -18.77
+  },
+  {
+    "id": "latch-click",
+    "duration": 0.65,
+    "peak_dbfs": -12.61,
+    "rms_dbfs": -35.48
+  },
+  {
+    "id": "soft-whoosh",
+    "duration": 2.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -18.89
+  },
+  {
+    "id": "cinematic-impact",
+    "duration": 3.0,
+    "peak_dbfs": -3.13,
+    "rms_dbfs": -21.55
+  },
+  {
+    "id": "scifi-chime",
+    "duration": 2.0,
+    "peak_dbfs": -3.24,
+    "rms_dbfs": -20.56
+  },
+  {
+    "id": "gentle-music-bed",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -11.56
+  },
+  {
+    "id": "suspense-bed",
+    "duration": 12.0,
+    "peak_dbfs": -2.85,
+    "rms_dbfs": -14.41
+  }
+]

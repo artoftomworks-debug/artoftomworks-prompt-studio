@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, open, stat, lstat, realpath, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { gzipSync, gunzipSync } from "node:zlib";
@@ -23,7 +23,9 @@ const execFileAsync = promisify(execFile);
 const idFor = (path) => createHash("sha256").update(path.toLocaleLowerCase()).digest("hex").slice(0, 24);
 let index = { roots:defaults, scannedAt:null, items:[], skipped:0, scanned:0, errors:0 };
 let scanState = { running:false, scanned:0, found:0, skipped:0, errors:0, message:"" };
+let scanCancelled = false;
 let deleting = false;
+const catalogBatchReviews = new Map();
 let labels = { version:1, categories:[...defaultCategories], items:{} };
 let labelWrites = Promise.resolve();
 let labelsRecovered = false;
@@ -248,23 +250,57 @@ export async function setCatalogAnnotation(id, changes) {
   return { id, rating, category };
 }
 
+export function normalizeCatalogRoot(value,platform=process.platform) {
+  let candidate=String(value || "").trim();
+  if(platform==="win32"){
+    if(candidate.startsWith('"')&&candidate.endsWith('"'))candidate=candidate.slice(1,-1).trim();
+    if(/^[a-z]:?$/iu.test(candidate))candidate=candidate[0].toUpperCase()+":\\";
+  }
+  const pathApi=platform==="win32"?win32:{isAbsolute,resolve};
+  if(!pathApi.isAbsolute(candidate)||candidate.length>400)throw new Error("Give an absolute folder or drive path");
+  return pathApi.resolve(candidate);
+}
+
 export async function addCatalogRoot(value) {
   if (scanState.running || deleting || cleanupState.running) throw new Error("Wait until the current operation finishes");
-  const candidate = String(value || "").trim();
-  if (!isAbsolute(candidate) || candidate.length > 400) throw new Error("Give an absolute folder path");
-  const root = resolve(candidate);
-  if (root === parse(root).root || !(await stat(root)).isDirectory()) throw new Error("Choose a folder, not a drive root");
+  const root = normalizeCatalogRoot(value);
+  if (!(await stat(root)).isDirectory()) throw new Error("Choose an existing folder or drive");
+  if (scanState.running || deleting || cleanupState.running) throw new Error("Wait until the current operation finishes");
   if (index.roots.length >= 12 && !index.roots.some((x) => x.toLocaleLowerCase() === root.toLocaleLowerCase())) throw new Error("Maximum 12 folders");
-  if (!index.roots.some((x) => x.toLocaleLowerCase() === root.toLocaleLowerCase())) index.roots.push(root);
-  clearCleanup();
-  await persist();
-  return catalogStatus();
+  deleting=true;
+  try{
+    const next={...index,roots:index.roots.some(x=>x.toLocaleLowerCase()===root.toLocaleLowerCase())?[...index.roots]:[...index.roots,root]};
+    await writeCatalogIndex(next);index=next;sentenceCatalogCache.clear();clearCleanup();catalogBatchReviews.clear();
+    return catalogStatus();
+  }finally{deleting=false;}
+}
+
+export async function removeCatalogRoot(value){
+  if(scanState.running||deleting||cleanupState.running)throw new Error("Wait until the current operation finishes");
+  const requested=normalizeCatalogRoot(value),root=index.roots.find(x=>resolve(x).toLocaleLowerCase()===requested.toLocaleLowerCase());
+  if(!root)throw new Error("This archive folder is not registered");
+  deleting=true;
+  try{
+    const roots=index.roots.filter(x=>x!==root),ranked=[...roots].sort((a,b)=>b.length-a.length),items=[];
+    for(const item of index.items){
+      const owner=ranked.find(candidate=>isWithin(resolve(candidate),resolve(item.path)));
+      if(owner)items.push({...item,root:owner});
+    }
+    const next={...index,roots,items,scanned:items.length,skipped:items.filter(item=>!item.prompt).length,errors:0};
+    await writeCatalogIndex(next);
+    const removedItems=index.items.length-items.length;index=next;sentenceCatalogCache.clear();clearCleanup();catalogBatchReviews.clear();
+    return {...catalogStatus(),removedRoot:root,removedItems};
+  }finally{deleting=false;}
 }
 
 async function persist() {
   sentenceCatalogCache.clear();
+  await writeCatalogIndex(index);
+}
+
+async function writeCatalogIndex(snapshot){
   await mkdir(dirname(fileURLToPath(storagePath)),{ recursive:true });
-  await writeFile(storagePath, gzipSync(Buffer.from(JSON.stringify(index)),{ level:6 }));
+  await writeFile(storagePath,gzipSync(Buffer.from(JSON.stringify(snapshot)),{level:6}));
 }
 
 function cleanPrompt(value) {
@@ -564,13 +600,20 @@ async function metadataForVideo(path) {
 async function* walk(root) {
   const pending = [root];
   while (pending.length) {
+    if(scanCancelled)return;
     const folder = pending.pop();
+    scanState.currentFolder=folder;scanState.directories++;
     let entries;
     try { entries = await readdir(folder,{ withFileTypes:true }); }
     catch { scanState.errors++; continue; }
     const files = [];
     for (const entry of entries) {
-      if (entry.isDirectory() && !/[\\/]?(?:node_modules|\.git|\.venv)$/i.test(entry.name)) pending.push(join(folder,entry.name));
+      if(entry.isSymbolicLink()){scanState.skippedFolders++;continue;}
+      if (entry.isDirectory()) {
+        if(/^(?:node_modules|\.git|\.venv|\$Recycle\.Bin|System Volume Information)$/iu.test(entry.name) ||
+            (win32.parse(root).root===root&&folder===root&&/^(?:Windows|Program Files(?: \(x86\))?|ProgramData|Recovery|PerfLogs|\$WinREAgent|\$WINDOWS\.~BT)$/iu.test(entry.name))){scanState.skippedFolders++;continue;}
+        pending.push(join(folder,entry.name));
+      }
       else if (entry.isFile()) files.push(entry.name);
     }
     yield { folder, files };
@@ -584,16 +627,22 @@ function record(path, root, kind, meta, details) {
 
 async function scan() {
   const items = [], seen = new Set(), oldByPath = new Map(index.items.map((item) => [item.path.toLocaleLowerCase(),item]));
-  scanState = { running:true, scanned:0, found:0, skipped:0, errors:0, message:"" };
+  scanCancelled=false;
+  scanState = { running:true, scanned:0, found:0, skipped:0, errors:0, message:"",directories:0,skippedFolders:0,currentFolder:"",cancelled:false,cancelling:false,finalizing:false };
+  const checkCancelled=()=>{if(scanCancelled)throw new Error("CATALOG_SCAN_CANCELLED");};
   try {
     for (const root of index.roots) {
+      checkCancelled();
       let rootStat;
       try { rootStat = await stat(root); } catch { scanState.errors++; continue; }
       if (!rootStat.isDirectory()) { scanState.errors++; continue; }
       for await (const {folder,files} of walk(root)) {
+        checkCancelled();
         const names = new Set(files.map((name) => name.toLocaleLowerCase()));
         const selected = files.filter((name) => mediaExt.has(extname(name).toLocaleLowerCase()));
-        for (let start=0; start<selected.length; start+=8) await Promise.all(selected.slice(start,start+8).map(async (name) => {
+        for (let start=0; start<selected.length; start+=8) {
+          checkCancelled();
+          await Promise.all(selected.slice(start,start+8).map(async (name) => {
           const ext = extname(name).toLocaleLowerCase();
           const path = join(folder,name);
           if (seen.has(path.toLocaleLowerCase())) return;
@@ -629,16 +678,22 @@ async function scan() {
             scanState.errors++;
             if (details) { items.push(record(path,root,imageExt.has(ext)?"image":"video",null,details)); scanState.skipped++; }
           }
-        }));
+        }));}
       }
     }
+    checkCancelled();scanState.finalizing=true;
     items.sort((a,b) => b.modified.localeCompare(a.modified));
     index = { roots:index.roots, scannedAt:new Date().toISOString(), items, scanned:scanState.scanned,
       skipped:scanState.skipped, errors:scanState.errors };
     clearCleanup();
     await persist();
-  } catch (error) { scanState.message = String(error.message || error); }
-  finally { scanState.running = false; }
+  } catch (error) {if(error.message==="CATALOG_SCAN_CANCELLED")scanState.cancelled=true;else scanState.message = String(error.message || error);}
+  finally { scanState.running = false;scanState.currentFolder="";scanState.cancelling=false;scanState.finalizing=false; }
+}
+
+export function cancelCatalogScan(){
+  if(!scanState.running||scanState.finalizing)return false;
+  scanCancelled=true;scanState.cancelling=true;return true;
 }
 
 export function startCatalogScan() {
@@ -785,6 +840,26 @@ export async function openCatalogImage(id) {
   return { opened:true, filename:item.filename };
 }
 
+export async function revealCatalogFile(id, launch=launchCatalogExplorer) {
+  const item = catalogItem(id);
+  if (!item || !["image","video"].includes(item.kind) || idFor(item.path)!==item.id ||
+      !index.roots.some(root=>resolve(root).toLocaleLowerCase()===resolve(item.root).toLocaleLowerCase())) {
+    throw new Error("This media item is no longer available in the catalog");
+  }
+  const details=await checkedFile(item.path,item.root);
+  if(details.size!==item.size || details.mtime.toISOString()!==item.modified)
+    throw new Error("Media changed since indexing; refresh the archive first");
+  await launch(item.path);
+  return {opened:true,filename:item.filename};
+}
+export async function launchCatalogExplorer(path) {
+  if(process.platform!=="win32")throw new Error("File Explorer is available only on Windows");
+  // Separate arguments, no shell: spaces, accents and command characters stay data.
+  const child=spawn("explorer.exe",["/select,",path],{detached:true,stdio:"ignore",windowsHide:true,shell:false});
+  await new Promise((resolve,reject)=>{child.once("spawn",resolve);child.once("error",reject);});
+  child.unref();
+}
+
 function isWithin(root, path) {
   const part = relative(root,path);
   return Boolean(part) && part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part);
@@ -832,6 +907,57 @@ async function buildDeletionPlan(id) {
 export async function previewCatalogDeletion(id) {
   if (scanState.running || deleting) throw new Error("Wait until the current operation finishes");
   return buildDeletionPlan(id);
+}
+
+export async function previewCatalogBatch(ids) {
+  if (scanState.running || cleanupState.running || deleting) throw new Error("Wait until the current operation finishes");
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 100 ||
+      ids.some(id => typeof id !== "string" || !/^[a-f0-9]{24}$/.test(id)) || new Set(ids).size !== ids.length) {
+    throw new Error("Choose 1 to 100 distinct catalog files");
+  }
+  deleting = true;
+  try {
+    const plans = [];
+    for (const id of ids) {
+      const plan = await buildDeletionPlan(id);
+      plans.push({plan, snapshot:await deletionSnapshot(plan)});
+    }
+    for (const [token,review] of catalogBatchReviews) if (Date.now() > review.expires) catalogBatchReviews.delete(token);
+    while (catalogBatchReviews.size >= 10) catalogBatchReviews.delete(catalogBatchReviews.keys().next().value);
+    const token = randomUUID();
+    catalogBatchReviews.set(token,{plans,expires:Date.now()+5*60*1000});
+    return {token,count:plans.length,files:plans.flatMap(entry => entry.plan.files)};
+  } finally { deleting = false; }
+}
+
+export async function deleteCatalogBatch(token,mode) {
+  if (mode !== "trash" && mode !== "permanent") throw new Error("Choose Recycle Bin or permanent deletion");
+  if (scanState.running || cleanupState.running || deleting) throw new Error("Wait until the current operation finishes");
+  const review = typeof token === "string" ? catalogBatchReviews.get(token) : null;
+  if (!review || Date.now() > review.expires) {
+    catalogBatchReviews.delete(token);
+    throw new Error("The deletion review expired. Review the selected files again");
+  }
+  catalogBatchReviews.delete(token);
+  deleting = true;
+  const deleted = [], warnings = [];
+  let failed = "";
+  try {
+    for (const entry of review.plans) {
+      const current = await buildDeletionPlan(entry.plan.id);
+      if (await deletionSnapshot(current) !== entry.snapshot) throw new Error("File changed after the review. Review the selection again");
+    }
+    for (const entry of review.plans) {
+      try {
+        const current = await buildDeletionPlan(entry.plan.id);
+        if (await deletionSnapshot(current) !== entry.snapshot) throw new Error("File changed after the review");
+        const warning = await removeCatalogPlan(current,mode);
+        deleted.push(current.id);
+        if (warning) warnings.push(`${current.filename}: ${warning}`);
+      } catch (error) { failed = `${entry.plan.filename}: ${error.message || error}`; break; }
+    }
+    return {mode,requested:review.plans.length,deleted,warnings,failed};
+  } finally { deleting = false; }
 }
 
 function checkedCleanupIds(ids) {

@@ -1,0 +1,73 @@
+{
+  "model": {
+    "kokoro-v1.0.int8.onnx": {
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
+      "bytes": 92361271,
+      "sha256": "6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb"
+    },
+    "voices-v1.0.bin": {
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+      "bytes": 28214398,
+      "sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+    },
+    "MODEL_README.md": {
+      "url": "https://huggingface.co/hexgrad/Kokoro-82M/raw/main/README.md",
+      "bytes": 6348,
+      "sha256": "91dcabced89db6f109b8786642f50402d3ee87450e8189589b6f85520e7f4d78"
+    },
+    "APACHE-2.0.txt": {
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "KOKORO_ONNX_LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/thewh1teagle/kokoro-onnx/main/LICENSE",
+      "bytes": 1080,
+      "sha256": "f61fdd0217de9ece8fa699912848d91187d84879fc2e689f0906d0c1299e955e"
+    },
+    "VOICES.md": {
+      "url": "https://huggingface.co/hexgrad/Kokoro-82M/raw/main/VOICES.md",
+      "bytes": 7625,
+      "sha256": "ec7e4941ad7e194af61e3455928528a9ff5360c7c505e412efab27d6a69ea106"
+    }
+  },
+  "generator": "scripts/generate_sound_starters.py",
+  "voices": [
+    {
+      "sample": "arena-intro-en",
+      "voice": "am_puck",
+      "speed": 1.1
+    },
+    {
+      "sample": "trailer-intro-en",
+      "voice": "am_fenrir",
+      "speed": 0.88
+    },
+    {
+      "sample": "advert-intro-en",
+      "voice": "af_bella",
+      "speed": 1.05
+    },
+    {
+      "sample": "documentary-intro-en",
+      "voice": "bm_george",
+      "speed": 0.98
+    },
+    {
+      "sample": "meditation-intro-en",
+      "voice": "af_heart",
+      "speed": 0.82
+    },
+    {
+      "sample": "scifi-intro-en",
+      "voice": "am_michael",
+      "speed": 0.94
+    },
+    {
+      "sample": "fantasy-intro-en",
+      "voice": "bm_fable",
+      "speed": 0.92
+    }
+  ],
+  "note": "Models, engine and voice vectors are development-only; only original scripts and rendered audio are bundled."
+}

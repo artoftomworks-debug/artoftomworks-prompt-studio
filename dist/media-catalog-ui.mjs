@@ -1,5 +1,36 @@
-import { compareCatalogItems, planNextExperiment, catalogCompareCopy, experimentStorageKey, createExperimentEntry, normalizeExperimentEntries } from "./catalog-compare.mjs";
+import { createTrialCatalogBridge, compareCatalogItems, planNextExperiment, catalogCompareCopy, experimentStorageKey, createExperimentEntry, normalizeExperimentEntries } from "./catalog-compare.mjs";
 import { buildCreatorPassport, buildPromptCorrectionMessages, cleanPromptCorrectionResponse, MAX_CORRECTION_INPUT } from "./creator-passport.mjs";
+import { attachCatalogGalleryActions } from "./catalog-gallery-actions.mjs";
+
+const catalogRootCopy={
+ HU:["Mappa vagy meghajtó útvonala (pl. E:\\)","Az almappákat is beolvassa. Teljes meghajtón ez tovább tarthat; a rendszer- és technikai mappákat kihagyja, a hivatkozott mappákat nem követi.","Beolvasás megszakítása","Megszakítás folyamatban…","bejárt mappa","Beolvasás megszakítva. A korábbi archívum megmaradt."],
+ EN:["Folder or drive path (e.g. E:\\)","Includes subfolders. Scanning a whole drive can take longer; system and technical folders are skipped and linked folders are not followed.","Cancel scan","Cancelling…","folders visited","Scan cancelled. The previous archive was kept."],
+ DE:["Ordner- oder Laufwerkspfad (z. B. E:\\)","Unterordner werden durchsucht. Ein ganzes Laufwerk dauert länger; System- und Technikordner sowie verknüpfte Ordner werden übersprungen.","Einlesen abbrechen","Wird abgebrochen…","Ordner durchsucht","Einlesen abgebrochen. Das vorherige Archiv bleibt erhalten."],
+ FR:["Chemin du dossier ou du disque (ex. E:\\)","Inclut les sous-dossiers. Un disque entier peut demander plus de temps ; les dossiers système, techniques et liés sont ignorés.","Annuler l’analyse","Annulation…","dossiers parcourus","Analyse annulée. L’archive précédente est conservée."],
+ ES:["Ruta de carpeta o unidad (p. ej. E:\\)","Incluye subcarpetas. Una unidad completa puede tardar más; se omiten carpetas del sistema, técnicas y enlazadas.","Cancelar análisis","Cancelando…","carpetas recorridas","Análisis cancelado. Se conserva el archivo anterior."],
+ IT:["Percorso cartella o unità (es. E:\\)","Include le sottocartelle. Un’intera unità può richiedere più tempo; cartelle di sistema, tecniche e collegate vengono ignorate.","Annulla scansione","Annullamento…","cartelle visitate","Scansione annullata. L’archivio precedente è conservato."],
+ PT:["Caminho de pasta ou unidade (ex. E:\\)","Inclui subpastas. Uma unidade inteira pode demorar mais; pastas de sistema, técnicas e ligadas são ignoradas.","Cancelar análise","A cancelar…","pastas visitadas","Análise cancelada. O arquivo anterior foi mantido."],
+ PL:["Ścieżka folderu lub dysku (np. E:\\)","Obejmuje podfoldery. Cały dysk może wymagać więcej czasu; foldery systemowe, techniczne i dowiązania są pomijane.","Anuluj skanowanie","Anulowanie…","odwiedzonych folderów","Skanowanie anulowane. Poprzednie archiwum zachowano."]
+};
+export function catalogRootLabels(language="EN"){return Object.fromEntries(["root","help","cancel","cancelling","folders","stopped"].map((key,i)=>[key,(catalogRootCopy[language]||catalogRootCopy.EN)[i]]));}
+const catalogRootControlCopy={
+ HU:["Eltávolítás az archívumból","Csak az archívumból veszi ki. A gépen lévő fájlok megmaradnak.","Az útvonal eltávolítva az archívumból. A fájlok megmaradtak; később újra hozzáadhatod.","Nem sikerült eltávolítani az útvonalat."],
+ EN:["Remove from archive","Removes the archive location only. Files on your computer are kept.","Location removed from the archive. Files were kept; you can add it again later.","Could not remove the archive location."],
+ DE:["Aus dem Archiv entfernen","Entfernt nur den Archivpfad. Dateien auf dem Computer bleiben erhalten.","Pfad aus dem Archiv entfernt. Dateien bleiben erhalten; der Pfad kann erneut hinzugefügt werden.","Archivpfad konnte nicht entfernt werden."],
+ FR:["Retirer de l’archive","Retire uniquement l’emplacement. Les fichiers de l’ordinateur sont conservés.","Emplacement retiré de l’archive. Les fichiers restent ; vous pouvez l’ajouter à nouveau.","Impossible de retirer cet emplacement."],
+ ES:["Quitar del archivo","Solo quita la ubicación del archivo. Los ficheros del equipo se conservan.","Ubicación retirada del archivo. Los ficheros se conservan; puedes añadirla de nuevo.","No se pudo quitar la ubicación."],
+ IT:["Rimuovi dall’archivio","Rimuove solo il percorso dall’archivio. I file sul computer restano.","Percorso rimosso dall’archivio. I file restano; puoi aggiungerlo di nuovo.","Impossibile rimuovere il percorso."],
+ PT:["Remover do arquivo","Remove apenas a localização do arquivo. Os ficheiros no computador são mantidos.","Localização removida do arquivo. Os ficheiros foram mantidos; pode adicioná-la novamente.","Não foi possível remover a localização."],
+ PL:["Usuń z archiwum","Usuwa tylko lokalizację z archiwum. Pliki na komputerze pozostają.","Lokalizacja usunięta z archiwum. Pliki pozostały; możesz dodać ją ponownie.","Nie udało się usunąć lokalizacji."]
+};
+export function catalogRootControlLabels(language="EN"){return Object.fromEntries(["remove","help","removed","error"].map((key,i)=>[key,(catalogRootControlCopy[language]||catalogRootControlCopy.EN)[i]]));}
+export function createCatalogRootChip(value,labels,disabled,onRemove){
+  const chip=document.createElement("div"),path=document.createElement("span"),close=document.createElement("button");
+  chip.className="catalog-root-chip";path.className="catalog-root-path";path.textContent=value;path.title=value;
+  close.type="button";close.className="catalog-root-remove";close.textContent="×";close.disabled=disabled;
+  close.setAttribute("aria-label",`${labels.remove}: ${value}`);close.title=`${labels.remove}. ${labels.help}`;
+  close.addEventListener("click",()=>{if(!close.disabled)return onRemove(value);});chip.append(path,close);return chip;
+}
 
 const catalogCopy = {
   HU:{ title:"Kereshető médiaarchívum", intro:"A kijelölt mappák képeinek és videóinak mentett promptjait keresi. Az eredeti fájlokat nem módosítja.", root:"További mappa teljes elérési útja", add:"Mappa hozzáadása", scan:"Archívum frissítése", scanning:"Beolvasás folyamatban…", search:"Keresés promptban, fájlnévben, modellben", all:"Minden típus", image:"Képek", video:"Videók", allFolders:"Minden mappa", result:"találat", indexed:"kiolvasható prompt", skipped:"fájlban nincs kiolvasható prompt", errors:"olvasási hiba", notScanned:"Még nem készült katalógus. Kattints az Archívum frissítése gombra.", empty:"Nincs találat.", load:"Prompt betöltése", copy:"Prompt másolása", view:"Videó megtekintése", path:"Fájl", prev:"Előző", next:"Következő", page:"Oldal", badRoot:"Nem sikerült hozzáadni a mappát.", offline:"A katalógushoz a Prompt Studio helyi indítóját használd.", confirm:"Lecseréljem az aktuális promptot a kiválasztottra?", loaded:"A prompt betöltve szerkesztésre.", copied:"A prompt a vágólapra került.", scanError:"A beolvasás megszakadt.", newRoot:"A mappa hozzáadva. Frissítsd az archívumot." },
@@ -249,11 +280,15 @@ export function formatCatalogRecipe(item,language="EN") {
   ];
   return `${fields.map(([label,value]) => `${label}: ${known(value)}`).join("\n")}\n\n${labels.note}`;
 }
+const viewerPathCopy = {"EN": ["Copy file path", "File path copied."], "HU": ["Fájl elérési útjának másolása", "A fájl elérési útja másolva."], "DE": ["Dateipfad kopieren", "Dateipfad kopiert."], "FR": ["Copier le chemin du fichier", "Chemin du fichier copié."], "ES": ["Copiar ruta del archivo", "Ruta del archivo copiada."], "IT": ["Copia percorso del file", "Percorso del file copiato."], "PT": ["Copiar caminho do ficheiro", "Caminho do ficheiro copiado."], "PL": ["Kopiuj ścieżkę pliku", "Ścieżka pliku skopiowana."]};
+const viewerExplorerCopy = {"EN": ["Show in File Explorer", "File Explorer opened with the file selected.", "Could not open File Explorer. Refresh the archive if the file was moved."], "HU": ["Megnyitás az Intézőben", "Az Intéző megnyílt, benne a kijelölt fájllal.", "Nem sikerült megnyitni az Intézőt. Ha a fájlt áthelyezted, frissítsd az archívumot."], "DE": ["Im Datei-Explorer anzeigen", "Datei-Explorer mit ausgewählter Datei geöffnet.", "Datei-Explorer konnte nicht geöffnet werden. Bei verschobener Datei das Archiv aktualisieren."], "FR": ["Afficher dans l’Explorateur", "Explorateur ouvert avec le fichier sélectionné.", "Impossible d’ouvrir l’Explorateur. Actualisez l’archive si le fichier a été déplacé."], "ES": ["Mostrar en el Explorador", "Explorador abierto con el archivo seleccionado.", "No se pudo abrir el Explorador. Actualiza el archivo si el fichero se ha movido."], "IT": ["Mostra in Esplora file", "Esplora file aperto con il file selezionato.", "Impossibile aprire Esplora file. Aggiorna l’archivio se il file è stato spostato."], "PT": ["Mostrar no Explorador", "Explorador aberto com o ficheiro selecionado.", "Não foi possível abrir o Explorador. Atualize o arquivo se o ficheiro foi movido."], "PL": ["Pokaż w Eksploratorze", "Eksplorator otwarty z zaznaczonym plikiem.", "Nie udało się otworzyć Eksploratora. Odśwież archiwum, jeśli plik przeniesiono."]};
 const viewerToolbar = `<div class="catalog-viewer-toolbar">
   <div class="catalog-viewer-navigation"><button type="button" data-viewer-prev></button><span data-viewer-position></span><button type="button" data-viewer-next></button></div>
   <label class="catalog-viewer-select"><input type="checkbox" data-viewer-mark><span data-viewer-select-label></span></label>
   <div class="catalog-viewer-stars" data-viewer-stars></div><button type="button" data-viewer-clear></button>
   <select data-viewer-category></select><button type="button" data-viewer-delete></button>
+  <button type="button" data-viewer-copy-path></button>
+  <button type="button" data-viewer-reveal-file></button>
   <span data-viewer-status role="status"></span>
 </div>`;
 const viewerPrompt = `<section class="catalog-viewer-prompt">
@@ -296,13 +331,13 @@ const learningCopy={
   PT:{heading:"O que aprendemos?",choose:"Escolha o melhor resultado para uma próxima prova focada.",observed:"Prefere {winner}. Diferenças legíveis: {fields}. É uma observação, não uma causa comprovada.",one:"Só uma diferença legível, mas podem existir fatores ocultos.",many:"Várias definições mudaram ou faltam dados; a causa não pode ser isolada.",none:"Sem diferença fiável nos dados legíveis.",nextLabel:"Próxima prova (editável)",nextTemplate:"Use {base} como base. Em duas novas execuções mantenha modelo, seed e restantes definições iguais; altere apenas {field} para o valor de {other}. Compare o aspeto preferido.",noSafe:"Não é possível propor uma prova segura de uma variável. Escolha uma definição compatível.",journalNext:"Próxima prova"},
   PL:{heading:"Czego się nauczyliśmy?",choose:"Wybierz lepszy wynik, aby otrzymać jeden następny test.",observed:"Wybierasz {winner}. Odczytane różnice: {fields}. To obserwacja, nie dowód przyczyny.",one:"Tylko jedna odczytana różnica, ale mogą istnieć ukryte czynniki.",many:"Zmieniło się kilka ustawień lub brakuje danych; nie można wskazać przyczyny.",none:"Brak pewnej różnicy w odczytanych danych.",nextLabel:"Następna próba (edytowalna)",nextTemplate:"Użyj {base} jako punktu wyjścia. W dwóch nowych próbach zachowaj ten sam model, seed i inne ustawienia; zmień tylko {field} na wartość z {other}. Porównaj preferowaną cechę.",noSafe:"Nie można bezpiecznie zaproponować próby z jedną zmienną. Wybierz zgodne ustawienie.",journalNext:"Następna próba"}
 };
-export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVideo, getLinkVideoLabel }) {
+export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVideo, getLinkVideoLabel, onCreativeCapture, onCreativeRemix, getCreativeLabels, onPublicationCapture, getPublicationLabel, onTrialCapture, getTrialLabel }) {
   const host = document.querySelector(".result-column");
-  const panel = document.createElement("section"); panel.className = "media-catalog result-card";
+  const panel = document.createElement("section"); panel.className = "media-catalog result-card"; panel.id="media-catalog";
   panel.innerHTML = `<div class="result-heading"><div><span class="eyebrow">ARCHIVE / 02</span><h2 id="catalog-title"></h2></div><span class="result-spark">⌕</span></div>
     <div class="catalog-body"><p id="catalog-intro"></p><div id="catalog-roots" class="catalog-roots"></div>
       <div class="catalog-add"><input id="catalog-root-input" maxlength="400"><button type="button" id="catalog-add-root" class="quiet-action"></button></div>
-      <button type="button" id="catalog-scan" class="secondary-action"></button><p id="catalog-progress" role="status" aria-live="polite"></p>
+      <p id="catalog-root-help" class="catalog-root-help"></p><button type="button" id="catalog-scan" class="secondary-action"></button><button type="button" id="catalog-scan-cancel" class="secondary-action" hidden></button><p id="catalog-progress" role="status" aria-live="polite"></p>
       <label class="catalog-thumbnail-toggle"><input id="catalog-auto-scan" type="checkbox"><span id="catalog-auto-scan-label"></span></label>
       <label class="catalog-thumbnail-toggle"><input id="catalog-show-thumbnails" type="checkbox"><span id="catalog-show-thumbnails-label"></span></label>
       <div class="catalog-compare-picker"><strong id="catalog-compare-picker-title"></strong><span id="catalog-compare-slot-a"></span><span id="catalog-compare-slot-b"></span>
@@ -394,6 +429,8 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   const el = (id) => panel.querySelector(`#${id}`), t = () => ({ ...catalogCopy.EN, ...catalogPromptCopy.EN, ...catalogOrganizeCopy.EN,
     ...catalogDateCopy.EN, ...catalogGalleryCopy.EN, ...catalogPageJumpCopy.EN, ...(catalogCopy[getLanguage()] || {}), ...(catalogPromptCopy[getLanguage()] || {}), ...(catalogOrganizeCopy[getLanguage()] || {}), ...(catalogDateCopy[getLanguage()] || {}), ...(catalogGalleryCopy[getLanguage()] || {}), ...(catalogPageJumpCopy[getLanguage()] || {}) });
   const td = () => ({ ...catalogDeleteCopy.EN, ...(catalogDeleteCopy[getLanguage()] || {}) });
+  const rootText=()=>catalogRootLabels(getLanguage());
+  const rootControlText=()=>catalogRootControlLabels(getLanguage());
   const query = el("catalog-query"), kind = el("catalog-kind"), root = el("catalog-root"), promptFilter = el("catalog-prompt-filter"),
     categoryFilter = el("catalog-category-filter"), ratingFilter = el("catalog-rating-filter"), results = el("catalog-results");
   const datePreset=el("catalog-date-preset"), dateFrom=el("catalog-date-from"), dateTo=el("catalog-date-to");
@@ -418,7 +455,9 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   let status = null, page = 0, total = 0, timer = null, delay = null, deletionPlan = null, deleteBusy = false, deletePreparing = false, previewItem = null;
   let scanRequestPending=false, scanMonitorActive=false, pendingCatalogRefresh=false, nextAutoScanAt=Date.now()+autoScanIntervalMs;
   let galleryMode=false, savedDateFilter=null, searchRevision=0;
-  let visibleItems = [], viewerItem = null, viewerIndex = 0, viewerBusy = false;
+  let galleryActions=null;
+  let rootChangePending=false;
+  let visibleItems = [], viewerItem = null, viewerIndex = 0, viewerBusy = false, standaloneSource=false,sourceLookupRevision=0;
   let viewerReturn = null;
   let passportController = null, passportRevision = 0;
   const marked = new Set();
@@ -966,7 +1005,8 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     const absolute=page*24+viewerIndex;
     find("prev").textContent=tw().previous; find("prev").disabled=viewerBusy || absolute<=0;
     find("next").textContent=tw().next; find("next").disabled=viewerBusy || absolute>=total-1;
-    find("position").textContent=`${absolute+1} ${tw().of} ${total}`;
+    find("position").textContent=standaloneSource?viewerItem.filename:`${absolute+1} ${tw().of} ${total}`;
+    if(standaloneSource){find("prev").disabled=true;find("next").disabled=true;}
     find("mark").checked=marked.has(viewerItem.id);
     find("select-label").textContent=`${tw().select} · ${marked.size} ${tw().selected}`;
     find("clear").textContent=t().clear;
@@ -986,6 +1026,10 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       stars.append(button);
     }
     find("clear").disabled=viewerBusy || !(viewerItem.rating>0);
+    find("copy-path").textContent=(viewerPathCopy[getLanguage()] || viewerPathCopy.EN)[0];
+    find("copy-path").disabled=!viewerItem.path;
+    find("reveal-file").textContent=(viewerExplorerCopy[getLanguage()] || viewerExplorerCopy.EN)[0];
+    find("reveal-file").disabled=viewerBusy || !viewerItem.id || !viewerItem.path;
     find("category").disabled=viewerBusy;
     find("delete").disabled=viewerBusy;
   }
@@ -1040,6 +1084,28 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     find("passport-open").disabled=!item._catalogDetailsReady;
     find("ask-ai").disabled=!item.prompt;
     find("workbench").disabled=!item._catalogDetailsReady || !item.prompt;
+    if(onCreativeCapture){
+      let save=dialog.querySelector("[data-viewer-proven-save]"),more=dialog.querySelector("[data-viewer-proven-more]");
+      if(!save){
+        save=document.createElement("button");save.type="button";save.dataset.viewerProvenSave="";
+        more=document.createElement("button");more.type="button";more.dataset.viewerProvenMore="";
+        find("passport-open").parentElement.append(save,more);
+        save.addEventListener("click",()=>{if(viewerItem?._catalogDetailsReady)onCreativeCapture(viewerItem);});
+        more.addEventListener("click",()=>{const source=viewerItem;if(!source?._catalogDetailsReady)return;dialog.close();requestAnimationFrame(()=>requestAnimationFrame(()=>onCreativeRemix?.(source)));});
+      }
+      const labels=getCreativeLabels?.()||{save:"Save to proven recipes",more:"More like this"};
+      save.textContent=labels.save;more.textContent=labels.more;save.disabled=!item._catalogDetailsReady;more.disabled=!item._catalogDetailsReady;
+    }
+    if(onTrialCapture){
+      let trial=dialog.querySelector("[data-viewer-trial]");
+      if(!trial){trial=document.createElement("button");trial.type="button";trial.dataset.viewerTrial="";find("passport-open").parentElement.append(trial);trial.addEventListener("click",()=>{const source=viewerItem;if(!source?._catalogDetailsReady)return;dialog.close();requestAnimationFrame(()=>onTrialCapture(source));});}
+      trial.textContent=getTrialLabel?.()||"Attach to trial bench";trial.disabled=!item._catalogDetailsReady;
+    }
+    if(onPublicationCapture){
+      let publish=dialog.querySelector("[data-viewer-publication]");
+      if(!publish){publish=document.createElement("button");publish.type="button";publish.dataset.viewerPublication="";find("passport-open").parentElement.append(publish);publish.addEventListener("click",()=>{const source=viewerItem;if(!source?._catalogDetailsReady)return;dialog.close();requestAnimationFrame(()=>onPublicationCapture(source));});}
+      publish.textContent=getPublicationLabel?.()||"Prepare publication";publish.disabled=!item._catalogDetailsReady;
+    }
   }
   function openViewerPassport(dialog) {
     const item=viewerItem;
@@ -1196,6 +1262,26 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     dialog.querySelector("[data-viewer-clear]").addEventListener("click",() => { void saveViewerAnnotation({rating:0}); });
     dialog.querySelector("[data-viewer-category]").addEventListener("change",(event) => { void saveViewerAnnotation({category:event.target.value}); });
     dialog.querySelector("[data-viewer-delete]").addEventListener("click",() => { if (viewerItem) void openDelete(viewerItem); });
+    dialog.querySelector("[data-viewer-reveal-file]").addEventListener("click",async () => {
+      const item=viewerItem,button=dialog.querySelector("[data-viewer-reveal-file]");
+      if(!item?.id || button.disabled)return;
+      button.disabled=true;
+      try {
+        await api("/api/catalog/reveal-file",{method:"POST",
+          headers:{"Content-Type":"application/json","X-Prompt-Studio-Action":"reveal-file"},
+          body:JSON.stringify({id:item.id})});
+        if(dialog.open && viewerItem?.id===item.id)dialog.querySelector("[data-viewer-status]").textContent=(viewerExplorerCopy[getLanguage()] || viewerExplorerCopy.EN)[1];
+      } catch {
+        if(dialog.open && viewerItem?.id===item.id)dialog.querySelector("[data-viewer-status]").textContent=(viewerExplorerCopy[getLanguage()] || viewerExplorerCopy.EN)[2];
+      } finally { if(dialog.open)renderViewerToolbar(dialog); }
+    });
+    dialog.querySelector("[data-viewer-copy-path]").addEventListener("click",async () => {
+      const item=viewerItem;if(!item?.path)return;
+      try {
+        await navigator.clipboard.writeText(String(item.path));
+        if(dialog.open && viewerItem?.id===item.id)dialog.querySelector("[data-viewer-status]").textContent=(viewerPathCopy[getLanguage()] || viewerPathCopy.EN)[1];
+      } catch {if(dialog.open && viewerItem?.id===item.id)dialog.querySelector("[data-viewer-status]").textContent=tr().copyFailed;}
+    });
     dialog.querySelector("[data-viewer-copy-prompt]").addEventListener("click",() => { void copyViewerContent(dialog,"prompt"); });
     dialog.querySelector("[data-viewer-copy-positive]").addEventListener("click",() => { void copyViewerField(dialog,"positive"); });
     dialog.querySelector("[data-viewer-copy-negative]").addEventListener("click",() => { void copyViewerField(dialog,"negative"); });
@@ -1236,7 +1322,9 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       event.preventDefault(); void navigateViewer(event.key==="ArrowLeft" ? -1 : 1);
     });
   }
-  function showVideo(item) {
+  function showVideo(item,standalone=false) {
+    standaloneSource=standalone;
+    if(!standalone)sourceLookupRevision++;
     rememberViewerOrigin();
     viewerItem=item; viewerIndex=Math.max(0,visibleItems.findIndex((entry) => entry.id===item.id));
     if (imageDialog.open) imageDialog.close();
@@ -1454,7 +1542,8 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     el("catalog-video-hint").textContent = tv().hint;
     el("catalog-show-thumbnails-label").textContent = tp().show;
     el("catalog-auto-scan-label").textContent=catalogAutoScanCopy[getLanguage()] || catalogAutoScanCopy.EN;
-    el("catalog-root-input").placeholder = t().root; query.placeholder = t().search;
+    el("catalog-root-input").placeholder = rootText().root;el("catalog-root-input").setAttribute("aria-label",rootText().root);el("catalog-root-input").setAttribute("aria-describedby","catalog-root-help");query.placeholder = t().search;
+    el("catalog-root-help").textContent=rootText().help;el("catalog-scan-cancel").textContent=rootText().cancel;
     el("catalog-date-heading").textContent=t().heading;
     el("catalog-date-from-label").textContent=t().from;
     el("catalog-date-to-label").textContent=t().to;
@@ -1484,25 +1573,37 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     renderStatus(); search();
   }
   function renderStatus() {
-    el("catalog-roots").replaceChildren(...(status?.roots || []).map((value) => {
-      const span = document.createElement("span"); span.textContent = value; span.title = value; return span;
-    }));
+    el("catalog-roots").replaceChildren(...(status?.roots || []).map(value=>createCatalogRootChip(value,rootControlText(),rootChangePending||Boolean(status?.scan?.running),removeArchiveRoot)));
     const progress = el("catalog-progress");
     if (!status) { progress.textContent = t().offline; return; }
     const info = status.scan;
     progress.textContent = info.running
-      ? `${t().scanning} ${info.scanned} · ${info.found} ${t().indexed}`
+      ? `${info.cancelling?rootText().cancelling:t().scanning} ${info.scanned} · ${info.found} ${t().indexed} · ${info.directories || 0} ${rootText().folders}${info.currentFolder?` · ${info.currentFolder}`:""}`
+      : info.cancelled ? rootText().stopped
       : info.message ? `${t().scanError} ${info.message}`
       : status.scannedAt ? `${status.indexed} ${t().files} · ${status.withPrompt} ${t().indexed} · ${status.rated || 0} ${t().rated} · ${status.skipped} ${t().skipped} · ${status.errors} ${t().errors}`
       : t().notScanned;
     el("catalog-scan").disabled = info.running;
+    el("catalog-scan-cancel").hidden=!info.running;el("catalog-scan-cancel").disabled=info.cancelling||info.finalizing;
+    el("catalog-add-root").disabled=info.running||rootChangePending;
+  }
+  async function removeArchiveRoot(value){
+    if(rootChangePending||status?.scan?.running)return;
+    rootChangePending=true;renderStatus();let message="";
+    try{
+      status=await api("/api/catalog/roots/remove",{method:"POST",headers:{"Content-Type":"application/json","X-Prompt-Studio-Action":"catalog-root-remove"},body:JSON.stringify({path:value})});
+      if(root.value&&!status.roots.includes(root.value))root.value="";
+      marked.clear();selected.A=null;selected.B=null;cleanupSelected.clear();galleryActions?.clearSelection();
+      page=0;translate();await refreshCleanup();message=rootControlText().removed;
+    }catch(error){message=`${rootControlText().error} ${error.message}`;}
+    finally{rootChangePending=false;renderStatus();if(message)el("catalog-progress").textContent=message;}
   }
   async function refreshStatus() {
     try { status = await api("/api/catalog/status"); renderStatus(); }
     catch { status = null; renderStatus(); }
   }
   async function refreshVisibleResults() {
-    if (document.hidden || activeViewerDialog()) { pendingCatalogRefresh=true; return; }
+    if (document.hidden || activeViewerDialog() || galleryActions?.locked()) { pendingCatalogRefresh=true; return; }
     const viewKey=() => JSON.stringify([page,galleryMode,query.value,kind.value,root.value,promptFilter.value,
       categoryFilter.value,ratingFilter.value,dateFrom.value,dateTo.value]);
     let expectedView=viewKey();
@@ -1535,6 +1636,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     timer=setTimeout(poll,2000);
   }
   async function beginCatalogScan(automatic=false) {
+    if (galleryActions?.locked()) return;
     if (scanRequestPending || scanMonitorActive || !status) return;
     if (automatic && (!autoScanToggle.checked || document.hidden || !status.roots?.length)) return;
     if (status.scan?.running) { monitorCatalogScan(); return; }
@@ -1551,8 +1653,20 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       nextAutoScanAt=Date.now()+60000;
     } finally { scanRequestPending=false; }
   }
+  galleryActions=attachCatalogGalleryActions({panel,results,pager:el("catalog-pager"),anchor:el("catalog-marked-count"),
+    getLabels:()=>({...cleanupB(),explanation:td().explanation,error:td().error,previousDay:t().previousDay,nextDay:t().nextDay}),
+    getItems:()=>visibleItems,getScope:()=>JSON.stringify([galleryMode,query.value,kind.value,root.value,promptFilter.value,categoryFilter.value,ratingFilter.value,dateFrom.value,dateTo.value]),
+    getDay:()=>galleryDay.value,isGallery:()=>galleryMode,changeDay:shiftGalleryDay,api,
+    onRemoved:async ids=>{
+      for(const id of ids){marked.delete(id);cleanupSelected.delete(id);for(const side of ["A","B"])if(selected[side]?.id===id)selected[side]=null;}
+      await refreshStatus();
+      total=Math.max(0,total-ids.length);page=Math.min(page,Math.max(0,Math.ceil(total/24)-1));
+      await search();await refreshCleanup();
+    }
+  });
   function resultRow(item) {
     const row = document.createElement("article"); row.className = "catalog-item"; row.dataset.catalogId=item.id;
+    galleryActions.checkbox(item,row);
     const media = document.createElement("div"); media.className = "catalog-media";
     if (item.kind === "image") {
       if (el("catalog-show-thumbnails").checked) {
@@ -1741,7 +1855,9 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       else el("catalog-progress").textContent=`${td().error} ${error.message}`;
     } finally { deletePreparing=false; }
   }
-  function showImage(item) {
+  function showImage(item,standalone=false) {
+    standaloneSource=standalone;
+    if(!standalone)sourceLookupRevision++;
     rememberViewerOrigin();
     viewerItem=item; previewItem=item; viewerIndex=Math.max(0,visibleItems.findIndex((entry) => entry.id===item.id));
     if (videoDialog.open) videoDialog.close();
@@ -1753,6 +1869,12 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     renderViewerToolbar(imageDialog);
     showViewerTechnical(item,imageDialog);
   }
+  document.addEventListener("prompt-studio-open-proven-source",async event=>{
+    const revision=++sourceLookupRevision;
+    try{const source=await api("/api/catalog/item?id="+encodeURIComponent(event.detail?.id||""));if(revision!==sourceLookupRevision)return;if(source.kind==="video")showVideo(source,true);else showImage(source,true);}
+    catch{if(revision===sourceLookupRevision)event.detail?.report?.();}
+  });
+  document.addEventListener("prompt-studio-creative-saved",event=>{const dialog=activeViewerDialog();if(dialog&&viewerItem?.id===event.detail?.sourceId)dialog.querySelector("[data-viewer-status]").textContent=event.detail.message;});
   el("catalog-image-close").addEventListener("click",() => imageDialog.close());
   imageDialog.addEventListener("close",() => { passportController?.abort(); passportRevision++; previewItem=null; el("catalog-image-large").removeAttribute("src"); if (!videoDialog.open) viewerItem=null; void restoreViewerOrigin(); });
   el("catalog-video-close").addEventListener("click",() => videoDialog.close());
@@ -1840,18 +1962,21 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   document.addEventListener("visibilitychange",() => { if (document.hidden) stopHoverPreview(); });
   async function search() {
     const revision=++searchRevision;
+    galleryActions?.setLoading(true);
     stopHoverPreview();
     detailObserver?.disconnect(); detailQueue.length=0;
     posterObserver?.disconnect(); posterQueue.length = 0;
-    if (!status) { visibleItems=[]; results.replaceChildren(); return; }
+    if (!status) { visibleItems=[]; results.replaceChildren(); galleryActions?.setLoading(false); return; }
     const params = new URLSearchParams({ q:query.value, kind:kind.value, root:root.value, prompt:promptFilter.value,
       category:categoryFilter.value, rating:ratingFilter.value, from:dateFrom.value, to:dateTo.value, page:String(page) });
     try {
       const data=await api(`/api/catalog/search?${params}`);
       if (revision!==searchRevision) return;
       total=data.total; visibleItems=data.results;
+      galleryActions.beginRender();
       results.replaceChildren(...data.results.map(resultRow));
       renderSelection(); renderMarked();
+      galleryActions.refresh();
       if (!data.results.length) { const message=document.createElement("p"); message.textContent=t().empty; results.append(message); }
       el("catalog-count").textContent=`${total} ${t().result}`;
       const pageLabel=`${t().page} ${page+1} / ${Math.max(1,Math.ceil(total/24))}`;
@@ -1861,16 +1986,21 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
         el(`catalog-first${suffix}`).disabled=page===0; el(`catalog-last${suffix}`).disabled=(page+1)*24>=total;
       }
     } catch { if (revision===searchRevision) { visibleItems=[]; results.replaceChildren(); } }
+    finally {if(revision===searchRevision)galleryActions?.setLoading(false);}
   }
   el("catalog-add-root").addEventListener("click", async () => {
+    if(rootChangePending)return;
     const input=el("catalog-root-input"), value=input.value.trim(); if (!value) return;
+    rootChangePending=true;renderStatus();
+    let message="";
     try {
-      status=await api("/api/catalog/roots",{ method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:value}) });
+      status=await api("/api/catalog/roots",{ method:"POST",headers:{"Content-Type":"application/json","X-Prompt-Studio-Action":"catalog-root"},body:JSON.stringify({path:value}) });
       input.value=""; translate();
       if (autoScanToggle.checked) void beginCatalogScan(true);
-      else el("catalog-progress").textContent=t().newRoot;
+      else message=t().newRoot;
     }
-    catch (error) { el("catalog-progress").textContent=`${t().badRoot} ${error.message}`; }
+    catch (error) {message=`${t().badRoot} ${error.message}`;}
+    finally{rootChangePending=false;renderStatus();if(message)el("catalog-progress").textContent=message;}
   });
   async function addCategory() {
     const input=el("catalog-new-category"), name=input.value.trim(); if (!name) return;
@@ -1884,6 +2014,11 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   el("catalog-add-category").addEventListener("click",addCategory);
   el("catalog-new-category").addEventListener("keydown",(event) => { if (event.key === "Enter") { event.preventDefault(); addCategory(); } });
   el("catalog-scan").addEventListener("click",() => { void beginCatalogScan(); });
+  el("catalog-scan-cancel").addEventListener("click",async()=>{
+    el("catalog-scan-cancel").disabled=true;
+    try{await api("/api/catalog/scan/cancel",{method:"POST",headers:{"X-Prompt-Studio-Action":"catalog-scan-control"}});await refreshStatus();}
+    catch(error){el("catalog-progress").textContent=`${t().scanError} ${error.message}`;el("catalog-scan-cancel").disabled=false;}
+  });
   autoScanToggle.addEventListener("change",() => {
     try { localStorage.setItem(autoScanStorageKey,String(autoScanToggle.checked)); } catch { /* Keep this page's choice. */ }
     if (autoScanToggle.checked) void beginCatalogScan(true);
@@ -1924,11 +2059,16 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       el(`catalog-first${suffix}`).hidden=false; el(`catalog-last${suffix}`).hidden=false;
     }
     results.after(el("catalog-pager"));
+    galleryActions?.refresh();
   }
   function selectGalleryDay(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
     galleryDay.value=value; dateFrom.value=value; dateTo.value=value; datePreset.value="custom";
     page=0; search();
+  }
+  function shiftGalleryDay(step) {
+    const day=new Date((galleryDay.value || dateString(new Date()))+"T12:00:00");
+    day.setDate(day.getDate()+step);selectGalleryDay(dateString(day));
   }
   galleryToggle.addEventListener("click",async () => {
     if (galleryMode) {
@@ -1953,8 +2093,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
   galleryDay.addEventListener("change",() => selectGalleryDay(galleryDay.value));
   for (const [id,step] of [["catalog-gallery-prev-day",-1],["catalog-gallery-next-day",1]]) {
     el(id).addEventListener("click",() => {
-      const day=new Date((galleryDay.value || dateString(new Date()))+"T12:00:00");
-      day.setDate(day.getDate()+step); selectGalleryDay(dateString(day));
+      shiftGalleryDay(step);
     });
   }
   datePreset.addEventListener("change",() => {
@@ -1990,6 +2129,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
       deleteDialog.close();
       for (const side of ["A","B"]) if (selected[side]?.id === deletedId) selected[side]=null;
       marked.delete(deletedId);
+      galleryActions.forget(deletedId);
       cleanupSelected.delete(deletedId);
       if (viewerItem?.id===deletedId) { if (imageDialog.open) imageDialog.close(); if (videoDialog.open) videoDialog.close(); viewerItem=null; }
       await refreshStatus();
@@ -2013,6 +2153,7 @@ export function attachMediaCatalog({ getLanguage, getCurrent, restore, onLinkVid
     else if (autoScanToggle.checked && status?.roots?.length) void beginCatalogScan(true);
   });
   void refreshCleanup();
+  return {compareIds:createTrialCatalogBridge({load:id=>api('/api/catalog/item?id='+encodeURIComponent(id)),isBusy:()=>compareBusy,isOpen:()=>compareDialog.open,apply:(a,b)=>{selected.A=a;selected.B=b;},open:openCompare})};
 }
 
 const creativeMemoryCopy = {

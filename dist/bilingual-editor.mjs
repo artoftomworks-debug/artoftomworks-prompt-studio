@@ -529,6 +529,7 @@ export function attachBilingualPromptEditor({ field, getLanguage = () => "EN", o
     note.textContent = t().note;
     if (renderedGlossaryLanguage !== getLanguage()) renderGlossary();
     onChange(drafts[active], active);
+    document.dispatchEvent?.(new Event("prompt-studio-draft-updated"));
   }
 
   function switchTo(language) {
